@@ -99,10 +99,10 @@ gc.labels<-d1a[,1:8]
 gc.labels$cluster<-clusters
 
 #Extract fitted, first, and second derivatives
-fitted.all<-fitted(fpca.growth,K = 3,derOptns = list(p = 0, bw = 1.01 , kernelType = 'epan') )
-derivs.all<-fitted(fpca.growth,K = 3,derOptns = list(p = 1, bw = 1.01 , kernelType = 'epan') )
-#2nd deriv
-derivs2.all<-fitted(fpca.growth,K = 3,derOptns = list(p = 2, bw = 1.01 , kernelType = 'epan') )
+fitted.all<-fitted(fpca.growth,K = 3,derOptns = list(p = 0, bw = 1.01 , kernelType = 'epan') ) #fitted
+derivs.all<-fitted(fpca.growth,K = 3,derOptns = list(p = 1, bw = 1.01 , kernelType = 'epan') ) #1st deriv
+derivs2.all<-fitted(fpca.growth,K = 3,derOptns = list(p = 2, bw = 1.01 , kernelType = 'epan') )#2nd deriv
+
 
 plot.select<-c(ana.select=2, temp.select=37,diag.select=5)
 par(mfrow=c(1,3))
@@ -118,7 +118,7 @@ title("2nd Derivative")
 
 
 ##################################################
-#Try to pull out time series that increase, then flatten, then increase more
+# pull out time series that increase, then flatten, then increase more
 #Which have 1st derivs that stay >0 (never decline)
 max.deriv1<-apply(derivs.all[,c(1:30)],1,function(x) max(x, na.rm=TRUE))
 max.deriv2<-apply(derivs2.all[,c(1:30)],1,function(x) max(x, na.rm=TRUE))
@@ -206,8 +206,6 @@ CreatePathPlot(fpca.growth, subset = c(pc3.select.index), K = 3, main = 'K = 3: 
 
 
 
-
-
 #####################
 #####################
 #VISUALIZE HOW GROWTH CURVES VARY ALONG PC3
@@ -258,8 +256,6 @@ matplot(pca.all[,pc3.grp7,2], type='l', col=trans.black, bty='l')
 par(mfrow=c(1,1))
 matplot(t(d1a[pc3.grp1, -c(1:6)]), col=trans.black, type='l')
 matplot(t(d1a[increase.indices, -c(1:6)]), col=trans.black, type='l')
-
-
 
 
 #Or first take mean of PCs by ST, then do regression

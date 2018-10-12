@@ -160,8 +160,149 @@ increasing.samples
 ```{r correlate_flatness}
 mod.df<-cbind.data.frame(ratio_min_max_rate=ratio_min_max_rate,id=d1a$ID, st=d1a$st, anaerobic=as.factor(d1a$anaerobic), t.max.deriv1=t.max.deriv1, temp= as.factor(d1a$temp))
 mod1<-lme(sqrt(ratio_min_max_rate) ~ st+anaerobic +t.max.deriv1 + temp , random=~1|id, data=mod.df[mod.df$anaerobic !='0',] )  
-summary(mod1)
+round(summary(mod1)$tTable,3)
 coef1<-mod1$coefficients$fixed
 coef.st<-coef1[substr(names(coef1),1,2)=='st']
 sort(coef.st)
+print(coef.st)
+```
+
+#Visualize how the growth curves vary according to Principal Components
+Indicates first set of variation is in height of curve; second is largely in timing, 3rd seems to be along whether it flattens or declines post peak
+
+```{r plot_pca, echo=FALSE}
+
+#####
+#FUNCTION TO EXTRACT fitted value based on 1st or second PCs
+# based on " Displaying the Important Features of Large Collections of Similar Curves" Jones and Rice 1989
+plot_func<-function(fpcaObj, plot.quants){
+  #Eigenfunctions
+  eigenfunc<-fpcaObj$phi  #Eigenfunction
+  xiEst2<-fpcaObj$xiEst     
+  est.meanfunc<-fpcaObj$mu  #Mean function
+  xi.est2.quantiles<- apply(xiEst2,2, quantile, probs=plot.quants)
+  yEst.q<-array(NA, dim=c(length(est.meanfunc),3,ncol(xi.est2.quantiles) ))
+  #Just reconstruct based on PCN
+  for(pcn in 1:ncol(xi.est2.quantiles) ){
+    yEst.q[,,pcn]<- t(xi.est2.quantiles[,pcn] %*%  t(eigenfunc[,pcn]) + t(matrix(rep(est.meanfunc,3), nrow=length(est.meanfunc))) )
+  }
+  return(yEst.q)
+}
+quants.pca<-plot_func(fpca.growth,plot.quants=c(0.1,0.5,0.9))
+par(mfrow=c(2,2))
+for(i in 1:4){
+matplot(quants.pca[,,i], type='l', bty='l', col=c('#1b9e77','#d95f02','#7570b3' ), lty=c(2,1,3), lwd=c(1,2,1)) #Plot 1st principal component range
+  title(paste0("Variation associated with PCA ", i,"; ", round(pct.var.pca[i],0),"%"))
+}
+```
+
+#Visualize the variaition in PC3--plot deviations from mean for low, med, high levels (from left to right) of PC3 (note this is ignoring the variation in PC1 and PC2) On further inspection, it seems that PC3 itself is a bit misleading when interpreted without context of PC1 and PC2
+```{r plot_pca3_only, echo=FALSE}
+#VISUALIZE HOW GROWTH CURVES VARY ALONG PC3
+plot_func<-function(fpcaObj, plot.quants){
+  #Eigenfunctions
+  eigenfunc<-fpcaObj$phi  #Eigenfunction
+  xiEst2<-fpcaObj$xiEst     
+  est.meanfunc<-fpcaObj$mu  #Mean function
+  xi.est2.quantiles<- apply(xiEst2,2, quantile, probs=plot.quants)
+  yEst.q<-array(NA, dim=c(length(est.meanfunc),nrow(xiEst2),ncol(xiEst2) ))
+  #Just reconstruct based on PCN
+  for(pcn in 1:ncol(xiEst2) ){
+    yEst.q[,,pcn]<- t(xiEst2[,pcn, drop=FALSE] %*%  t(eigenfunc[,pcn]) + t(matrix(rep(est.meanfunc,nrow(xiEst2)), nrow=length(est.meanfunc))) )
+  }
+  return(yEst.q)
+}
+pca.all<-plot_func(fpca.growth,plot.quants=c(0.1,0.5,0.9))
+pc3<-fpcs$PC3
+pc2<-fpcs$PC2
+
+pc2.q<-quantile(pc2, probs=c(0.05, 0.1,0.2,0.4,0.6,0.8))
+pc3.q<-quantile(pc3, probs=c(0.05, 0.1,0.2,0.4,0.6,0.8))
+pc3.grp1<- which(pc3<pc3.q[1])
+pc3.grp2<-which(pc3>=pc3.q[1] & pc3<pc3.q[2])
+pc3.grp3<-which(pc3>=pc3.q[2] & pc3<pc3.q[3])
+pc3.grp4<-which(pc3>=pc3.q[3] & pc3<pc3.q[4])
+pc3.grp5<-which(pc3>=pc3.q[4] & pc3<pc3.q[5])
+pc3.grp6<-which(pc3>=pc3.q[5] & pc3<pc3.q[6])
+pc3.grp7<-which(pc3>=pc3.q[6])
+#PC2 score is high
+pc2.grp6<-which(pc2>=pc2.q[5] & pc2<pc2.q[6])
+pc2.grp7<-which(pc2>=pc2.q[6])
+
+#Plot this variability
+par(mfrow=c(1,7))
+matplot(pca.all[,pc3.grp1,2], type='l', col=trans.black, bty='l')
+matplot(pca.all[,pc3.grp2,2], type='l', col=trans.black, bty='l')
+matplot(pca.all[,pc3.grp3,2], type='l', col=trans.black, bty='l')
+matplot(pca.all[,pc3.grp4,2], type='l', col=trans.black, bty='l')
+matplot(pca.all[,pc3.grp5,2], type='l', col=trans.black, bty='l')
+matplot(pca.all[,pc3.grp6,2], type='l', col=trans.black, bty='l')
+matplot(pca.all[,pc3.grp7,2], type='l', col=trans.black, bty='l')
+
+```
+
+#Compile covariates; generate average pre-vaccine carriage variable
+```{r covar_setup}
+#Covariate data
+cov1<-read.csv('pneumo_master v2.csv')
+cov1$st<-as.character(cov1$ST)
+cov1$MASSCARR01[is.na(cov1$MASSCARR01)]<-0
+cov1$OSMANCARRN[is.na(cov1$OSMANCARRN)]<-0
+cov1$SLEEMANCARRN[is.na(cov1$SLEEMANCARRN)]<-0
+cov1$NORWAYCARR_PRE[is.na(cov1$NORWAYCARR_PRE)]<-0
+cov1$TROTTERCARRN[is.na(cov1$TROTTERCARRN)]<-0
+cov1$GREECECARRN[is.na(cov1$GREECECARRN)]<-0
+cov1$ave_carr_pre<-apply( cbind(cov1$MASSCARR01, cov1$OSMANCARRN, cov1$SLEEMANCARRN, cov1$NORWAYCARR_PRE, cov1$TROTTERCARRN, cov1$GREECECARRN), 1, mean, na.rm=TRUE )
+cov1$st[cov1$st=='6A/C']<-'6A'
+carr.comp<-merge(mod.df,cov1, by='st' )
+```
+
+#Analyze association between growth curve pattern and epi/Ps characteristics
+These analyses are basically the same as regression above, but drop serotype fixed effect and instead include serotype characteristics. This shows correlation with Ps complexity and the presence of uronic acids (more complex Ps, bigger crash;more uronic acid, smaller crash) 
+```{r epi_cor}
+carr.comp2<-carr.comp[carr.comp$anaerobic != '0' & !is.na(carr.comp$ratio_min_max_rate) ,]
+
+#CFR Harboe
+  ds<-carr.comp2[,c('ratio_min_max_rate', 'CFRHARBOE','anaerobic','t.max.deriv1', 'temp','id' )]
+  ds<-ds[complete.cases(ds),]
+  reg.cfr<-lme(sqrt(ratio_min_max_rate) ~ CFRHARBOE + anaerobic +t.max.deriv1 + temp , random=~1|id, data=ds )  
+  round(summary(reg.cfr)$tTable,3)
+   plot(carr.comp2$ratio_min_max_rate, carr.comp2$CFRHARBOE, col='white')
+   text(carr.comp2$ratio_min_max_rate, carr.comp2$CFRHARBOE, carr.comp2$st)
+
+ #Total carbon
+  ds<-carr.comp2[,c('ratio_min_max_rate', 'TOTALCARBONREPEAT','anaerobic','t.max.deriv1', 'temp','id' )]
+  ds<-ds[complete.cases(ds),]
+  reg.carbon<-lme(sqrt(ratio_min_max_rate) ~ TOTALCARBONREPEAT + anaerobic +t.max.deriv1 + temp , random=~1|id, data=ds )
+  round(summary(reg.carbon)$tTable,3)
+   plot(carr.comp2$ratio_min_max_rate, carr.comp2$TOTALCARBONREPEAT, col='white')
+   text(carr.comp2$ratio_min_max_rate, carr.comp2$TOTALCARBONREPEAT, carr.comp2$st)
+
+ #Invasiveness AJE paper--inverse variance weights
+   inv1<-read.csv('mcmc_invasive_single_stage.csv')
+   inv1$st=as.character(inv1$st)
+   inv1$st[inv1$st=='6A/C']<-'6A'
+   inv2<-merge(carr.comp, inv1, by='st' , all=TRUE)
+    ds<-inv2[,c('ratio_min_max_rate', 'log.inv.prec.age1','log.inv.age1','anaerobic','t.max.deriv1', 'temp','id' )]
+   ds<-ds[complete.cases(ds),]
+   trans.red<-rgb(1,0,0, alpha=0.1)
+    symbols(sqrt(ds$ratio_min_max_rate), ds$log.inv.age1, sqrt(ds$log.inv.prec.age1/pi),inches=0.35,     
+            bty='l',fg="white", bg=trans.red,         xlab="Ratio increasing/decreasing Rates", ylab="log(Invasiveness")
+   text(inv2$PC2, inv2$log.inv.age1, inv2$st, cex=0.75)
+  reg.inv<-lme(sqrt(ratio_min_max_rate) ~ log.inv.age1 + anaerobic +t.max.deriv1 + temp , random=~1|id, data=ds )
+  round(summary(reg.inv)$tTable,3)
+  
+ #PS components
+   ps1<-read.csv('PS Composition_SS_final.csv')
+   ps1$st<-as.character(ps1$Serotype)
+   ps2<-merge(carr.comp2, ps1, by='st' , all=TRUE)
+   ps2$NAC<-0
+   ps2$NAC[ps2$GlcNAc==1 | ps2$GalNAc==1 | ps2$ManNAc==1 |  ps2$ManNAcA==1 |ps2$FucNAc==1 |ps2$PneNAc ==1] <-1
+   ps2$uronic<-0
+   ps2$uronic[ps2$GalA==1 |ps2$GlcA==1 ]<-1  #GlcA and GalA derived from same pathway
+   ds<-ps2[,c('ratio_min_max_rate', 'uronic','NAC','anaerobic','t.max.deriv1', 'temp','id' )]
+   ds<-ds[complete.cases(ds),]
+   reg.ps<-lme(sqrt(ratio_min_max_rate) ~ uronic +NAC + anaerobic +t.max.deriv1 + temp , random=~1|id, data=ds )
+   round(summary(reg.ps)$tTable,3)
+   plot(as.factor(ps2$uronic), sqrt(ps2$ratio_min_max_rate))
 ```
