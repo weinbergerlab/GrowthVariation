@@ -98,10 +98,20 @@ Y.list<- split(d1a[,-c(1:8, (48+8+1):ncol(d1a))], as.factor(1:nrow(d1a)))
 Y.list<-lapply(Y.list, function(x) as.numeric(x[1,])) #List of OD600 values
 T.list<-lapply(Y.list, function(x) (1:length(x))/2 ) #List of times (h)
 fpca.growth<-FPCA(Y.list, T.list, optns= list(dataType='Dense', plot=TRUE))
+pct.var.pca<-fpca.growth$lambda/sum(fpca.growth$lambda)*100 #percent of variation  associated with each component
 
 fitted.all<-fitted(fpca.growth,K = 3,derOptns = list(p = 0, bw = 1.01 , kernelType = 'epan') ) #fitted
 derivs.all<-fitted(fpca.growth,K = 3,derOptns = list(p = 1, bw = 1.01 , kernelType = 'epan') ) #1st deriv
 derivs2.all<-fitted(fpca.growth,K = 3,derOptns = list(p = 2, bw = 1.01 , kernelType = 'epan') )#2nd deriv
+
+#Extract PCs
+pcs<-as.data.frame(fpca.growth$xiEst )
+names(pcs)<-paste0('PC', 1:ncol(pcs))
+gc.labels<-d1a[,1:8]
+
+fpcs<-cbind.data.frame(gc.labels,pcs) #EXTRACT THE PCs
+fpcs$st<-as.character(fpcs$st)
+
 ```
 
 #Extract information on derivatives (maximum and minimum derivatives, timing of max and min)
@@ -135,6 +145,8 @@ Simple classifier:  abs( min(0,min(deriv1)) )/ Max(deriv1). If this value is clo
 
 ```{r curve.classify}
 #Ratio of max rate of increase vs max rate of decrease if decreases
+  trans.black<-rgb(0,0,0, alpha=0.3)
+
 ratio_min_max_rate<-abs(min.deriv1.0)/max.deriv1 #Bigger values=faster decline relative to increase
 curve.cuts<-list(c(0,0.05),c(0.05,0.2),c(0.2,10))
 par(mfrow=c(length(curve.cuts),3))
@@ -288,7 +300,7 @@ carr.comp2<-carr.comp[carr.comp$anaerobic != '0' & !is.na(carr.comp$ratio_min_ma
    trans.red<-rgb(1,0,0, alpha=0.1)
     symbols(sqrt(ds$ratio_min_max_rate), ds$log.inv.age1, sqrt(ds$log.inv.prec.age1/pi),inches=0.35,     
             bty='l',fg="white", bg=trans.red,         xlab="Ratio increasing/decreasing Rates", ylab="log(Invasiveness")
-   text(inv2$PC2, inv2$log.inv.age1, inv2$st, cex=0.75)
+   text(sqrt(ds$ratio_min_max_rate), inv2$log.inv.age1, inv2$st, cex=0.75)
   reg.inv<-lme(sqrt(ratio_min_max_rate) ~ log.inv.age1 + anaerobic +t.max.deriv1 + temp , random=~1|id, data=ds )
   round(summary(reg.inv)$tTable,3)
   
