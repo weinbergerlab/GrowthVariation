@@ -1,0 +1,167 @@
+---
+title: "fpca"
+author: "Dan Weinberger"
+date: "October 12, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+##Functional Data Analysis of growth curve data
+These growth data were collected by Adrienn Tothpal and colleagues as described in https://doi.org/10.1101/416040 . Pneumococci were grown in BHI broth in microtiter plates under a range of temperature and oxygen levels. Functional Data Analysis (FDA) is a method for extracting key information from time series data and summarizing the curves using a series of functions. This allows for easy calculation of derivatives and the decomposition of the curves into principal components based onvariability in the functions. With FPCA, smooth, flexible functions are fit through the data, and for each function, each growth curve is assigned a multiplier (PC). By multiplying the multiplier by the function and adding the functions to the mean trajectory, it is possible to recreate the original curve. For more info on FPCA, see Principal Modes of Variation for Processes With Continuous Sample Curves Castro, Lawton, SYLVESTRE and a strightforwrd review: https://www.tandfonline.com/doi/full/10.1080/14763141.2017.1392594?src=recsys
+
+```{r loadpkg, include=FALSE}
+packages = c("grofit","reshape","RColorBrewer","dplyr",'fdapace', 'EMCluster','aplpack','ks','nlme' )
+#use this function to check if each package is on the local machine
+#if a package is installed, it will be loaded
+#if any are not, the missing package(s) will be installed and loaded
+package.check <- lapply(packages, FUN = function(x) {
+    if (!require(x, character.only = TRUE)) {
+        install.packages(x, dependencies = TRUE)
+        library(x, character.only = TRUE)
+    }
+})
+#search()
+
+```
+
+## Format the data
+The data need to be cleaned and formatted to facilitate analysis
+
+```{r pressure, echo=FALSE}
+##IMPORT AND FORMAT DATA
+d1a<- read.csv("master 5_24_2018.csv")
+d1a$st[which(d1a$st=="11")]<-"11A"
+d1a$st[which(d1a$st=="15")]<-"15B"
+d1a$st[d1a$st=='5' &d1a$Diagnosis==5]<-"14"  #Our ST 5 strain from CDC is actually ST 14
+#d1a$dx<-NA
+#d1a$dx[d1a$Diagnosis ==0]<-0
+#d1a$dx[d1a$Diagnosis %in% c(5)]<-5
+#d1a$dx[d1a$Diagnosis %in% c(2)]<-2
+d1a$st=as.character(d1a$st)
+d1a$Diagnosis=as.numeric(d1a$Diagnosis)
+d1a$X<-NULL
+d1a$Age<-NULL
+d1a$Agegroup=NULL
+d1a$Ery<-NULL
+d1a$Pen<-NULL
+d1a$Pathogen<-NULL
+d1a$Pilus<-NULL
+d1a$Variant<-NULL
+#index<-1:nrow(d1a)
+ID2<-paste(d1a$Group,d1a$st,d1a$Diagnosis,sep="_")
+d1a<-cbind.data.frame(ID2, d1a)
+d1a$ID<-as.character(d1a$ID)
+d1a$ID[d1a$ID==""]<-as.character(d1a$ID2[d1a$ID==""])
+d1a$ID<-as.factor(d1a$ID)
+d1a$Group<-NULL
+d1a$Diagnosis[substr(d1a$st,1,3)=="603"]<-7 #isogenic
+d1a$Diagnosis[substr(d1a$st,1,4)=="TIGR"]<-8 #isogenic
+d1a$Diagnosis[d1a$st=="15B-" | d1a$st=='10A-']<-9 #cps- knockout
+d1a<-d1a[substr(d1a$st,1,1) != "P",]
+d1a<-d1a[d1a$st != "SAUR",]
+d1a<-d1a[d1a$st != "Morax",]
+d1a<-d1a[d1a$st != "Blank",]
+d1a<-d1a[d1a$st != "",]
+d1a$st[d1a$st %in% c("15B", "15C", '15B/C')] <-"15BC"
+unique(d1a$st)
+## blank based on t=0
+d1a$X1[d1a$X1>d1a$X2]<- d1a$X2[d1a$X1>d1a$X2]
+d1a[,7:ncol(d1a)]<-d1a[,7:ncol(d1a)] - (d1a$X1) #
+d1a[,7:ncol(d1a)][d1a[,7:ncol(d1a)]<0]<-0  #Values must be >=0
+d1a<-d1a[d1a$temp>=30 & d1a$temp<=39,]
+d1a<-d1a[d1a$st !="unknown",]
+d1a<-d1a[d1a$st !="GBS",]
+d1a<-d1a[which(!is.na(d1a$Diagnosis)),]
+d1a$st[d1a$st=="NT"]<-"cps-"
+d1a$st[d1a$st=="TIGR4 Janus"]<-"cps-"
+d1a$st[d1a$st=="603 Janus"]<-"cps-"
+d1a$st[d1a$st=="603"]<-"6B"
+d1a$st[d1a$st=="TIGR4"]<-"4"
+d1a$st[d1a$st=="TIGR5"]<-"5"
+d1a$st[d1a$st=="TIGR14"]<-"14"
+d1a$st[d1a$st=="TIGR19F"]<-"19F"
+d1a$st[d1a$st=="R6"]<-"cps-"
+d1a<-d1a[d1a$temp>=30 & d1a$temp<=39,] #Restrict to 30-39C temperatures (readings at lower temps not reliable)
+
+```
+
+#Prepare data for FPCA analysis
+Extract the fitted values and 1st and 2nd derivatives using fitted() function
+
+```{r prepFPCA}
+Y.list<- split(d1a[,-c(1:8, (48+8+1):ncol(d1a))], as.factor(1:nrow(d1a)))
+Y.list<-lapply(Y.list, function(x) as.numeric(x[1,])) #List of OD600 values
+T.list<-lapply(Y.list, function(x) (1:length(x))/2 ) #List of times (h)
+fpca.growth<-FPCA(Y.list, T.list, optns= list(dataType='Dense', plot=TRUE))
+
+fitted.all<-fitted(fpca.growth,K = 3,derOptns = list(p = 0, bw = 1.01 , kernelType = 'epan') ) #fitted
+derivs.all<-fitted(fpca.growth,K = 3,derOptns = list(p = 1, bw = 1.01 , kernelType = 'epan') ) #1st deriv
+derivs2.all<-fitted(fpca.growth,K = 3,derOptns = list(p = 2, bw = 1.01 , kernelType = 'epan') )#2nd deriv
+```
+
+#Extract information on derivatives (maximum and minimum derivatives, timing of max and min)
+
+```{r extractderiv }
+max.deriv1<-apply(derivs.all[,c(1:30)],1,function(x) max(x, na.rm=TRUE))
+max.deriv2<-apply(derivs2.all[,c(1:30)],1,function(x) max(x, na.rm=TRUE))
+min.deriv1<-apply(derivs.all[,c(1:30)],1,function(x) min(x, na.rm=TRUE))
+min.deriv2<-apply(derivs2.all[,c(1:30)],1,function(x) min(x, na.rm=TRUE))
+deriv1.start.increase<-apply(derivs.all[,c(1:30)],1,function(x){
+  which(lag(x)<0 & x>0)
+} )
+min.deriv1.0<-min.deriv1
+min.deriv1.0[min.deriv1>0]<-0 #if never declines, set minimum of deriv1 to 0
+
+#What is time of max 1st derivative?
+t.max.deriv1<-rep(NA, length=length(max.deriv1))
+for(i in 1:length(max.deriv1)){
+  t.max.deriv1[i]<-which(derivs.all[i,c(1:30)]==max.deriv1[i])[1]
+}
+#What is time of min 2nd derivative?
+t.min.deriv2<-rep(NA, length=length(min.deriv2))
+for(i in 1:length(min.deriv2)){
+  t.min.deriv2[i]<-which(derivs2.all[i,c(1:30)]==min.deriv2[i])[1]
+}
+```
+
+#Classify curves based on deriatives
+With first derivative: if density increases then decreases, should have large positive value followed by large negative value. If fensity increases then plateau, derivative will be positive then move towards 0; if inceases then increases again will be positive, then decrease, then increase again.
+Simple classifier:  abs( min(0,min(deriv1)) )/ Max(deriv1). If this value is close to 1, then max rate of decrease equals max rate of increase. If deriv1 never gets below 0, then set to 0. Smaller values (closer to 0) indicate flatness or increase following log growth; bigger values indicate a crash 
+
+```{r curve.classify}
+#Ratio of max rate of increase vs max rate of decrease if decreases
+ratio_min_max_rate<-abs(min.deriv1.0)/max.deriv1 #Bigger values=faster decline relative to increase
+curve.cuts<-list(c(0,0.05),c(0.05,0.2),c(0.2,10))
+par(mfrow=c(length(curve.cuts),3))
+for(i in 1:length(curve.cuts)){
+increase.indices<-which(ratio_min_max_rate<curve.cuts[[i]][2] & ratio_min_max_rate>=curve.cuts[[i]][1]) #What is cutoff--lower values give ones that decrease less
+matplot(t(fitted.all[increase.indices,]), type='l',col=trans.black, lty=1, bty='l')
+title(paste0("Smooth Observed ",i))
+matplot(t(derivs.all[increase.indices,]), type='l',col=trans.black, lty=1, bty='l')
+abline(h=0, col='red')
+title("1st Derivative")
+matplot(t(derivs2.all[increase.indices,]), type='l',col=trans.black, lty=1, bty='l')
+abline(h=0, col='red')
+title("2nd Derivative")
+}
+flatest.grp<-which(ratio_min_max_rate<curve.cuts[[1]][2] & ratio_min_max_rate>=curve.cuts[[1]][1]) 
+increasing.samples<-d1a[flatest.grp, c(1:6)]
+increasing.samples<-increasing.samples[order(increasing.samples$st),]
+increasing.samples
+```
+
+
+#Evaluate characteristics of curves that have smaller or larger values based on our simple classifier
+```{r correlate_flatness}
+mod.df<-cbind.data.frame(ratio_min_max_rate=ratio_min_max_rate,id=d1a$ID, st=d1a$st, anaerobic=as.factor(d1a$anaerobic), t.max.deriv1=t.max.deriv1, temp= as.factor(d1a$temp))
+mod1<-lme(sqrt(ratio_min_max_rate) ~ st+anaerobic +t.max.deriv1 + temp , random=~1|id, data=mod.df[mod.df$anaerobic !='0',] )  
+summary(mod1)
+coef1<-mod1$coefficients$fixed
+coef.st<-coef1[substr(names(coef1),1,2)=='st']
+sort(coef.st)
+```
