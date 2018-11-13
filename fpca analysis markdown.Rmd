@@ -1,7 +1,7 @@
 ---
 title: "fpca"
 author: "Dan Weinberger"
-date: "October 12, 2018"
+date: "November 12, 2018"
 output: html_document
 ---
 
@@ -119,45 +119,46 @@ fpcs$st<-as.character(fpcs$st)
 ```{r extractderiv }
 max.deriv1<-apply(derivs.all[,c(1:30)],1,function(x) max(x, na.rm=TRUE))
 max.deriv2<-apply(derivs2.all[,c(1:30)],1,function(x) max(x, na.rm=TRUE))
-min.deriv1<-apply(derivs.all[,c(1:30)],1,function(x) min(x, na.rm=TRUE))
-min.deriv2<-apply(derivs2.all[,c(1:30)],1,function(x) min(x, na.rm=TRUE))
 deriv1.start.increase<-apply(derivs.all[,c(1:30)],1,function(x){
   which(lag(x)<0 & x>0)
 } )
-min.deriv1.0<-min.deriv1
-min.deriv1.0[min.deriv1>0]<-0 #if never declines, set minimum of deriv1 to 0
 
 #What is time of max 1st derivative?
+#prior to the max slope, set to NA so that cna calculate minimum deriv AFTER the maximum
 t.max.deriv1<-rep(NA, length=length(max.deriv1))
-for(i in 1:length(max.deriv1)){
+derivs.all.post.max<-derivs.all
+for(i in 1: nrow(derivs.all)){
   t.max.deriv1[i]<-which(derivs.all[i,c(1:30)]==max.deriv1[i])[1]
+  derivs.all.post.max[i,1:t.max.deriv1[i]]<-NA
 }
-#What is time of min 2nd derivative?
-t.min.deriv2<-rep(NA, length=length(min.deriv2))
-for(i in 1:length(min.deriv2)){
-  t.min.deriv2[i]<-which(derivs2.all[i,c(1:30)]==min.deriv2[i])[1]
-}
+
+min.deriv1<-apply(derivs.all.post.max[,c(1:30)],1,function(x) min(x, na.rm=TRUE))
+min.deriv2<-apply(derivs.all.post.max[,c(1:30)],1,function(x) min(x, na.rm=TRUE))
+min.deriv1.0<-min.deriv1
+#min.deriv1.0[min.deriv1>0]<-0 #if never declines, set minimum of deriv1 to 0
 ```
 
 #Classify curves based on deriatives
-With first derivative: if density increases then decreases, should have large positive value followed by large negative value. If fensity increases then plateau, derivative will be positive then move towards 0; if inceases then increases again will be positive, then decrease, then increase again.
-Simple classifier:  abs( min(0,min(deriv1)) )/ Max(deriv1). If this value is close to 1, then max rate of decrease equals max rate of increase. If deriv1 never gets below 0, then set to 0. Smaller values (closer to 0) indicate flatness or increase following log growth; bigger values indicate a crash 
+With first derivative: if density increases then decreases, should have large positive value followed by large negative value. If fensity increases then plateau, derivative will be positive then move towards 0; if inceases then increases again will be positive, then decrease, then increase again. Take difference between max and min and scale by max. If large max and plateau, this value will be close to 1; if large max followed by equally large min, value will be ~0.5
+
+Simple classifier:  (max.deriv-min.deriv)/ Max(deriv1). If this value is >1, then decline is faster than then the max exponential increase; if decline  e of decrease equals max rate of increase.  closer to 1 indicates flat
 
 ```{r curve.classify}
 #Ratio of max rate of increase vs max rate of decrease if decreases
   trans.black<-rgb(0,0,0, alpha=0.3)
 
-ratio_min_max_rate<-abs(min.deriv1.0)/max.deriv1 #Bigger values=faster decline relative to increase
-curve.cuts<-list(c(0,0.05),c(0.05,0.2),c(0.2,10))
-par(mfrow=c(length(curve.cuts),3))
+ratio_min_max_rate<- (max.deriv1-min.deriv1.0)/max.deriv1 #smaller values=faster decline relative to increase 
+hist(ratio_min_max_rate)
+curve.cuts<-list(c(0,1),c(1.0,2.0),c(2.0 ,max(ratio_min_max_rate)))
+par(mfrow=c(length(curve.cuts),3),mar=c(1,1,1,1))
 for(i in 1:length(curve.cuts)){
 increase.indices<-which(ratio_min_max_rate<curve.cuts[[i]][2] & ratio_min_max_rate>=curve.cuts[[i]][1]) #What is cutoff--lower values give ones that decrease less
-matplot(t(fitted.all[increase.indices,]), type='l',col=trans.black, lty=1, bty='l')
+matplot(t(fitted.all[increase.indices,]), type='l', lty=1, bty='l')
 title(paste0("Smooth Observed ",i))
-matplot(t(derivs.all[increase.indices,]), type='l',col=trans.black, lty=1, bty='l')
+matplot(t(derivs.all[increase.indices,]), type='l', lty=1, bty='l')
 abline(h=0, col='red')
 title("1st Derivative")
-matplot(t(derivs2.all[increase.indices,]), type='l',col=trans.black, lty=1, bty='l')
+matplot(t(derivs2.all[increase.indices,]), type='l', lty=1, bty='l')
 abline(h=0, col='red')
 title("2nd Derivative")
 }
@@ -167,16 +168,45 @@ increasing.samples<-increasing.samples[order(increasing.samples$st),]
 increasing.samples
 ```
 
+Evaluating the interaction betwene temperature and oxygen; we can see that curves are flatter in aerobic conditions. these differences are most pronounced at 33-37C and probably flattest at 33C. (bigger values=greater declines)
+
+```{r flatness.int}
+  interaction.plot(ps2$temp, ps2$anaerobic, sqrt(ps2$ratio_min_max_rate), bty='l')
+   title('Interaction of temperature and oxygen')
+   
+   ps2.mid<-ps2[ps2$temp %in% c('33','35','37'),]
+     interaction.plot(ps2.mid$st, ps2.mid$anaerobic, ps2.mid$ratio_min_max_rate, bty='l')
+   title('Interaction of ST and oxygen')
+```
+
 
 #Evaluate characteristics of curves that have smaller or larger values based on our simple classifier
 ```{r correlate_flatness}
 mod.df<-cbind.data.frame(ratio_min_max_rate=ratio_min_max_rate,id=d1a$ID, st=d1a$st, anaerobic=as.factor(d1a$anaerobic), t.max.deriv1=t.max.deriv1, temp= as.factor(d1a$temp))
-mod1<-lme(sqrt(ratio_min_max_rate) ~ st+anaerobic +t.max.deriv1 + temp , random=~1|id, data=mod.df[mod.df$anaerobic !='0',] )  
+mod1<-lme(ratio_min_max_rate ~ st+ t.max.deriv1 + temp*anaerobic , random=~1|id, data=mod.df[mod.df$anaerobic !='0',] )  
 round(summary(mod1)$tTable,3)
 coef1<-mod1$coefficients$fixed
 coef.st<-coef1[substr(names(coef1),1,2)=='st']
-sort(coef.st)
-print(coef.st)
+#sort(coef.st)
+print(sort(coef.st))
+```
+
+#Same thing but restrict to 33-37C and stratify by aerobic vs anaerobic
+```{r correlate_flatness}
+mod.df<-cbind.data.frame(ratio_min_max_rate=ratio_min_max_rate,id=d1a$ID, st=d1a$st, anaerobic=as.factor(d1a$anaerobic), t.max.deriv1=t.max.deriv1, temp= as.factor(d1a$temp))
+mod2<-lme(ratio_min_max_rate ~ st+ t.max.deriv1 + temp*anaerobic , random=~1|id, data=mod.df[mod.df$anaerobic !='0' & mod.df$temp %in% c('33','35','37'),] )  
+round(summary(mod1)$tTable,3)
+coef2<-mod2$coefficients$fixed
+coef.st2<-coef2[substr(names(coef2),1,2)=='st']
+#sort(coef.st)
+print(sort(coef.st2))
+
+mod3<-lme(ratio_min_max_rate ~ st*anaerobic+ t.max.deriv1 + temp  , random=~1|id, data=mod.df[mod.df$anaerobic %in% c('1','2') & mod.df$temp %in% c('33','35','37'),] ) 
+round(summary(mod3)$tTable,3)
+coef3<-mod3$coefficients$fixed
+coef.st3<-coef3[substr(names(coef3),1,2)=='st']
+#print(sort(coef.st3))
+
 ```
 
 #Visualize how the growth curves vary according to Principal Components
@@ -242,7 +272,7 @@ pc2.grp6<-which(pc2>=pc2.q[5] & pc2<pc2.q[6])
 pc2.grp7<-which(pc2>=pc2.q[6])
 
 #Plot this variability
-par(mfrow=c(1,7))
+par(mfrow=c(2,4))
 matplot(pca.all[,pc3.grp1,2], type='l', col=trans.black, bty='l')
 matplot(pca.all[,pc3.grp2,2], type='l', col=trans.black, bty='l')
 matplot(pca.all[,pc3.grp3,2], type='l', col=trans.black, bty='l')
@@ -269,15 +299,17 @@ cov1$st[cov1$st=='6A/C']<-'6A'
 carr.comp<-merge(mod.df,cov1, by='st' )
 ```
 
+
+
 #Analyze association between growth curve pattern and epi/Ps characteristics
 These analyses are basically the same as regression above, but drop serotype fixed effect and instead include serotype characteristics. This shows correlation with Ps complexity and the presence of uronic acids (more complex Ps, bigger crash;more uronic acid, smaller crash) 
 ```{r epi_cor}
-carr.comp2<-carr.comp[carr.comp$anaerobic != '0' & !is.na(carr.comp$ratio_min_max_rate) ,]
+carr.comp2<-carr.comp[carr.comp$anaerobic %in% c('1','2') &carr.comp$temp %in% c('33','35','37') & !is.na(carr.comp$ratio_min_max_rate) ,]
 
 #CFR Harboe
   ds<-carr.comp2[,c('ratio_min_max_rate', 'CFRHARBOE','anaerobic','t.max.deriv1', 'temp','id' )]
   ds<-ds[complete.cases(ds),]
-  reg.cfr<-lme(sqrt(ratio_min_max_rate) ~ CFRHARBOE + anaerobic +t.max.deriv1 + temp , random=~1|id, data=ds )  
+  reg.cfr<-lme(ratio_min_max_rate ~ CFRHARBOE + anaerobic +t.max.deriv1 + temp , random=~1|id, data=ds )  
   round(summary(reg.cfr)$tTable,3)
    plot(carr.comp2$ratio_min_max_rate, carr.comp2$CFRHARBOE, col='white')
    text(carr.comp2$ratio_min_max_rate, carr.comp2$CFRHARBOE, carr.comp2$st)
@@ -285,7 +317,7 @@ carr.comp2<-carr.comp[carr.comp$anaerobic != '0' & !is.na(carr.comp$ratio_min_ma
  #Total carbon
   ds<-carr.comp2[,c('ratio_min_max_rate', 'TOTALCARBONREPEAT','anaerobic','t.max.deriv1', 'temp','id' )]
   ds<-ds[complete.cases(ds),]
-  reg.carbon<-lme(sqrt(ratio_min_max_rate) ~ TOTALCARBONREPEAT + anaerobic +t.max.deriv1 + temp , random=~1|id, data=ds )
+  reg.carbon<-lme(ratio_min_max_rate ~ TOTALCARBONREPEAT + anaerobic +t.max.deriv1 + temp , random=~1|id, data=ds )
   round(summary(reg.carbon)$tTable,3)
    plot(carr.comp2$ratio_min_max_rate, carr.comp2$TOTALCARBONREPEAT, col='white')
    text(carr.comp2$ratio_min_max_rate, carr.comp2$TOTALCARBONREPEAT, carr.comp2$st)
@@ -312,9 +344,37 @@ carr.comp2<-carr.comp[carr.comp$anaerobic != '0' & !is.na(carr.comp$ratio_min_ma
    ps2$NAC[ps2$GlcNAc==1 | ps2$GalNAc==1 | ps2$ManNAc==1 |  ps2$ManNAcA==1 |ps2$FucNAc==1 |ps2$PneNAc ==1] <-1
    ps2$uronic<-0
    ps2$uronic[ps2$GalA==1 |ps2$GlcA==1 ]<-1  #GlcA and GalA derived from same pathway
-   ds<-ps2[,c('ratio_min_max_rate', 'uronic','NAC','anaerobic','t.max.deriv1', 'temp','id' )]
+   plot(as.factor(ps2$uronic), ps2$ratio_min_max_rate)
+   plot(as.factor(ps2$uronic[ps2$anaerobic=='1']), ps2$ratio_min_max_rate[ps2$anaerobic=='1'])
+   plot(as.factor(ps2$uronic[ps2$anaerobic=='2']), ps2$ratio_min_max_rate[ps2$anaerobic=='2'])
+   
+      ds<-ps2[ps2$anaerobic!='0',c('ratio_min_max_rate', 'uronic','NAC','anaerobic','t.max.deriv1', 'temp','id' )]
    ds<-ds[complete.cases(ds),]
-   reg.ps<-lme(sqrt(ratio_min_max_rate) ~ uronic +NAC + anaerobic +t.max.deriv1 + temp , random=~1|id, data=ds )
-   round(summary(reg.ps)$tTable,3)
-   plot(as.factor(ps2$uronic), sqrt(ps2$ratio_min_max_rate))
+   reg.ps<-lme(ratio_min_max_rate ~ uronic +NAC + anaerobic +t.max.deriv1 + temp + anaerobic*temp, random=~1|id, data=ds )
+     round(summary(reg.ps)$tTable,3)
+   
+
+```
+
+#Does association between CPS component and growth vary by temp?
+In Adrienn's experiments, she found that adding purified CPS had a big effect at 37, no effect or even inhibitory at 33C. Here it appears affect of uronic strongest at 33C with aerobic/catalase growth; slightly weaker at 33C anaerobic. 33C and 37C anaerobic same effect. 37 aerobic weaker effect than 33 aerobic 
+
+```{r effect_temp}
+
+ reg.ps1<-lme(ratio_min_max_rate ~ uronic +NAC + t.max.deriv1   , random=~1|id, data=ds[ds$temp=='33' & ds$anaerobic=='1',] )
+     round(summary(reg.ps1)$tTable,3)
+
+ reg.ps2<-lme(ratio_min_max_rate ~ uronic +NAC + t.max.deriv1   , random=~1|id, data=ds[ds$temp=='33' & ds$anaerobic=='2',] )
+      round(summary(reg.ps2)$tTable,3)
+
+  reg.ps3<-lme(ratio_min_max_rate ~ uronic +NAC + t.max.deriv1   , random=~1|id, data=ds[ds$temp=='37' & ds$anaerobic=='1',] )
+     round(summary(reg.ps3)$tTable,3)
+
+ reg.ps4<-lme(ratio_min_max_rate ~ uronic +NAC + t.max.deriv1   , random=~1|id, data=ds[ds$temp=='37' & ds$anaerobic=='2',] )
+     round(summary(reg.ps4)$tTable,3)
+     
+          #Interaction
+reg.ps.int<-lme(ratio_min_max_rate ~ uronic*anaerobic +NAC*anaerobic + anaerobic +t.max.deriv1 + temp + anaerobic*temp, random=~1|id, data=ds )
+     round(summary(reg.ps.int)$tTable,3)
+
 ```
