@@ -171,7 +171,7 @@ trans.black<-rgb(0,0,0, alpha=0.3)
 
 ratio_min_max_rate<- (max.deriv1-min.deriv1.0)/max.deriv1 #smaller values=faster decline relative to increase 
 hist(ratio_min_max_rate)
-curve.cuts<-list(c(0,1.0),c(1.0,2.0),c(2.0 ,max(ratio_min_max_rate)))
+curve.cuts<-list(c(0,1.0),c(1.0,1.5),c(1.5,2.0),c(2.0 ,max(ratio_min_max_rate)))
 par(mfrow=c(length(curve.cuts),4),mar=c(1,1,1,1))
 for(i in 1:length(curve.cuts)){
 increase.indices<-which(ratio_min_max_rate<curve.cuts[[i]][2] & ratio_min_max_rate>=curve.cuts[[i]][1] & t.max.deriv1<=25) #What is cutoff--lower values give ones that decrease less; 
@@ -377,10 +377,11 @@ carr.comp2<-carr.comp[carr.comp$anaerobic %in% c('1','2') &carr.comp$temp %in% c
    plot(as.factor(ps2$uronic), ps2$ratio_min_max_rate)
    plot(as.factor(ps2$uronic[ps2$anaerobic=='1']), ps2$ratio_min_max_rate[ps2$anaerobic=='1'])
    plot(as.factor(ps2$uronic[ps2$anaerobic=='2']), ps2$ratio_min_max_rate[ps2$anaerobic=='2'])
+   plot(as.factor(ps2$Gro[ps2$anaerobic=='2']), ps2$ratio_min_max_rate[ps2$anaerobic=='2'])
    
-      ds<-ps2[ps2$anaerobic!='0',c('ratio_min_max_rate', 'uronic','NAC','anaerobic','t.max.deriv1', 'temp','id')]
+      ds<-ps2[ps2$anaerobic!='0',c('ratio_min_max_rate', 'uronic','NAC','Gro','anaerobic','t.max.deriv1', 'temp','id')]
    ds<-ds[complete.cases(ds),]
-   reg.ps<-lme(ratio_min_max_rate ~ uronic +NAC + anaerobic +t.max.deriv1 + temp + anaerobic*temp, random=~1|id, data=ds )
+   reg.ps<-lme(ratio_min_max_rate ~ uronic +NAC +Gro+ anaerobic +t.max.deriv1 + temp + anaerobic*temp, random=~1|id, data=ds )
      round(summary(reg.ps)$tTable,3)
 ```
 
