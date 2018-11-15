@@ -111,6 +111,8 @@ T.list<-lapply(Y.list, function(x) (1:length(x))/2 ) #List of times (h)
 ```{r extractderiv , echo=FALSE}
 #Extract information on derivatives (maximum and minimum derivatives, timing of max and min)
 max.deriv1<-apply(deriv1,1,function(x) max(x, na.rm=TRUE))
+auc.deriv1<-apply(deriv1,1,function(x) sum(x, na.rm=TRUE))
+
 max.deriv2<-apply(deriv2,1,function(x) max(x, na.rm=TRUE))
 deriv1.start.increase<-apply(deriv1,1,function(x){
   which(lag(x)<0 & x>0)
@@ -143,6 +145,8 @@ trans.black<-rgb(0,0,0, alpha=0.3)
 
 ratio_min_max_rate<- (max.deriv1-min.deriv1.0)/max.deriv1 #smaller values=faster decline relative to increase 
 hist(ratio_min_max_rate)
+
+hist()
 curve.cuts<-list(c(0,1.1),c(1.1,2.0),c(2.0 ,max(ratio_min_max_rate)))
 par(mfrow=c(length(curve.cuts),4),mar=c(1,1,1,1))
 for(i in 1:length(curve.cuts)){
@@ -190,6 +194,34 @@ abline(h=0, col='red')
 title("2nd Derivative")
 }
 flatest.grp<-which(ratio_min_max_rate<curve.cuts[[1]][2] & ratio_min_max_rate>=curve.cuts[[1]][1] & t.max.deriv1<=30) 
+increasing.samples<-d1a[flatest.grp, c(1:6)]
+increasing.samples<-increasing.samples[order(increasing.samples$st),]
+increasing.samples
+```
+
+#Or classify based on AUC of deriv1
+```{r curve.classify3.auc}
+#Ratio of max rate of increase vs max rate of decrease if decreases
+trans.black<-rgb(0,0,0, alpha=0.3)
+
+hist(auc.deriv1)
+curve.cuts<-list(c(0,0.1),c(0.1,0.3),c(0.3 ,max(auc.deriv1)))
+par(mfrow=c(length(curve.cuts),4),mar=c(1,1,1,1))
+for(i in 1:length(curve.cuts)){
+increase.indices<-which(auc.deriv1<curve.cuts[[i]][2] & auc.deriv1>=curve.cuts[[i]][1] & t.max.deriv1<=15) #What is cutoff--lower values give ones that decrease less; 
+increase.indices.plot<-sample(increase.indices, size=min(50, length(increase.indices)))
+matplot(t(d1.data[increase.indices.plot,]), type='l', lty=1, bty='l')
+title(paste0("Observed ",i))
+matplot(t(fit1[increase.indices.plot,]), type='l', lty=1, bty='l')
+title(paste0("Smooth Observed ",i))
+matplot(t(deriv1[increase.indices.plot,]), type='l', lty=1, bty='l')
+abline(h=0, col='red')
+title("1st Derivative")
+matplot(t(deriv2[increase.indices.plot,]), type='l', lty=1, bty='l')
+abline(h=0, col='red')
+title("2nd Derivative")
+}
+flatest.grp<-which(auc.deriv1<curve.cuts[[3]][2] & auc.deriv1>=curve.cuts[[3]][1] & t.max.deriv1<=15) 
 increasing.samples<-d1a[flatest.grp, c(1:6)]
 increasing.samples<-increasing.samples[order(increasing.samples$st),]
 increasing.samples
