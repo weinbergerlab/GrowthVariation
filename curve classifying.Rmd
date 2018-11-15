@@ -31,7 +31,9 @@ package.check <- lapply(packages, FUN = function(x) {
 
 ```{r pressure, echo=FALSE}
 ##IMPORT AND FORMAT DATA
-d1a<- read.csv("master 5_24_2018.csv")
+library(RCurl)
+x<-getURL('https://raw.githubusercontent.com/weinbergerlab/GrowthVariation/master/master%205_24_2018.csv')
+d1a<- read.csv(text=x)
 d1a$st[which(d1a$st=="11")]<-"11A"
 d1a$st[which(d1a$st=="15")]<-"15B"
 d1a$st[d1a$st=='5' &d1a$Diagnosis==5]<-"14"  #Our ST 5 strain from CDC is actually ST 14
@@ -255,7 +257,8 @@ print(sort(coef.st4))
 
 ```{r covar_setup, echo=FALSE}
 #Covariate data
-cov1<-read.csv('pneumo_master v2.csv')
+x<-getURL('https://raw.githubusercontent.com/weinbergerlab/GrowthVariation/master/pneumo_master%20v2.csv')
+cov1<-read.csv(text=x)
 cov1$st<-as.character(cov1$ST)
 cov1$MASSCARR01[is.na(cov1$MASSCARR01)]<-0
 cov1$OSMANCARRN[is.na(cov1$OSMANCARRN)]<-0
@@ -349,8 +352,8 @@ carr.comp2<-carr.comp[carr.comp$anaerobic %in% c('1','2') &carr.comp$temp %in% c
 Invasiveness (AJE paper)--inverse variance weights(note regression not weighted)
 ```{r epi_cor3}
 carr.comp2<-carr.comp[carr.comp$anaerobic %in% c('1','2') &carr.comp$temp %in% c('33','35','37') & !is.na(carr.comp$ratio_min_max_rate) ,]
-
-   inv1<-read.csv('mcmc_invasive_single_stage.csv')
+  x<-getURL('https://raw.githubusercontent.com/weinbergerlab/GrowthVariation/master/mcmc_invasive_single_stage.csv')
+   inv1<-read.csv(text=x)
    inv1$st=as.character(inv1$st)
    inv1$st[inv1$st=='6A/C']<-'6A'
    inv2<-merge(carr.comp, inv1, by='st' , all=TRUE)
