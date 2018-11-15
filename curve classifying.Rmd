@@ -2,16 +2,16 @@
 title: "ClassifyCurves"
 author: "Dan Weinberger"
 date: "November 12, 2018"
-output: html_document
+output:
+  pdf_document: default
+  html_document: default
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
-
-##Functional Data Analysis of growth curve data
+##Classify growth curves based on trends following exponential growth phase
 These growth data were collected by Adrienn Tothpal and colleagues as described in https://doi.org/10.1101/416040 . Pneumococci were grown in BHI broth in microtiter plates under a range of temperature and oxygen levels. Functional Data Analysis (FDA) is a method for extracting key information from time series data and summarizing the curves using a series of functions. This allows for easy calculation of derivatives and the decomposition of the curves into principal components based onvariability in the functions. With FPCA, smooth, flexible functions are fit through the data, and for each function, each growth curve is assigned a multiplier (PC). By multiplying the multiplier by the function and adding the functions to the mean trajectory, it is possible to recreate the original curve. For more info on FPCA, see Principal Modes of Variation for Processes With Continuous Sample Curves Castro, Lawton, SYLVESTRE and a strightforwrd review: https://www.tandfonline.com/doi/full/10.1080/14763141.2017.1392594?src=recsys
 
 ```{r loadpkg, include=FALSE}
@@ -28,9 +28,6 @@ package.check <- lapply(packages, FUN = function(x) {
 #search()
 
 ```
-
-## Format the data
-The data need to be cleaned and formatted to facilitate analysis
 
 ```{r pressure, echo=FALSE}
 ##IMPORT AND FORMAT DATA
@@ -68,7 +65,7 @@ d1a<-d1a[d1a$st != "Morax",]
 d1a<-d1a[d1a$st != "Blank",]
 d1a<-d1a[d1a$st != "",]
 d1a$st[d1a$st %in% c("15B", "15C", '15B/C')] <-"15BC"
-unique(d1a$st)
+#unique(d1a$st)
 ## blank based on t=0
 d1a$X1[d1a$X1>d1a$X2]<- d1a$X2[d1a$X1>d1a$X2]
 d1a[,7:ncol(d1a)]<-d1a[,7:ncol(d1a)] - (d1a$X1) #
@@ -86,15 +83,15 @@ d1a$st[d1a$st=="TIGR5"]<-"5"
 d1a$st[d1a$st=="TIGR14"]<-"14"
 d1a$st[d1a$st=="TIGR19F"]<-"19F"
 d1a$st[d1a$st=="R6"]<-"cps-"
-d1a<-d1a[d1a$temp>=30 & d1a$temp<=39,] #Restrict to 30-39C temperatures (readings at lower temps not reliable)
+d1a<-d1a[d1a$temp>=33 & d1a$temp<=37 &d1a$anaerobic %in% c('1','2'),] #Restrict to 30-39C temperatures (readings at lower temps not reliable)
 
 gromax<-apply(d1a[,7:ncol(d1a)],1, max, na.rm=TRUE)
 d1a<-d1a[gromax>=0.1,] #if no growth above OD600=0.1, filter out the row
 
 ```
 
-##Simpler; just fit spline to data, calculate derivative
-Use smooth.spline function, which is same thing they do in the grofit package
+##Fit spline to data, calculate derivative
+Use smooth.spline function, which is same thing they do in the grofit package; use a fixed smoothing parameter for simplicity
 ```{r prep_spline}
 Y.list<- split(d1a[,-c(1:8, (48+8+1):ncol(d1a))], as.factor(1:nrow(d1a)))
 d1.data<-d1a[,-c(1:8, (48+8+1):ncol(d1a))]
@@ -109,9 +106,8 @@ T.list<-lapply(Y.list, function(x) (1:length(x))/2 ) #List of times (h)
 ```
 
 
+```{r extractderiv , echo=FALSE}
 #Extract information on derivatives (maximum and minimum derivatives, timing of max and min)
-Only count max deriv if it occurs n first 15 hours 
-```{r extractderiv }
 max.deriv1<-apply(deriv1,1,function(x) max(x, na.rm=TRUE))
 max.deriv2<-apply(deriv2,1,function(x) max(x, na.rm=TRUE))
 deriv1.start.increase<-apply(deriv1,1,function(x){
@@ -161,16 +157,48 @@ matplot(t(deriv2[increase.indices.plot,]), type='l', lty=1, bty='l')
 abline(h=0, col='red')
 title("2nd Derivative")
 }
-flatest.grp<-which(ratio_min_max_rate<curve.cuts[[1]][2] & ratio_min_max_rate>=curve.cuts[[1]][1]) 
+flatest.grp<-which(ratio_min_max_rate<curve.cuts[[1]][2] & ratio_min_max_rate>=curve.cuts[[1]][1] & t.max.deriv1<=25) 
+increasing.samples<-d1a[flatest.grp, c(1:6)]
+increasing.samples<-increasing.samples[order(increasing.samples$st),]
+increasing.samples
+```
+#Can we pull out specifically the curves that have 2 exponential growth phases?
+Should show up as a double hump on the 1st derivative. 11A, 3, 8, 18A pop out on this analysis; 3 and 8 have almost identical motifs (Glc-GlcA). 11A and 18A both have Glycerol
+
+```{r curve.classify2}
+#Ratio of max rate of increase vs max rate of decrease if decreases
+trans.black<-rgb(0,0,0, alpha=0.3)
+
+ratio_min_max_rate<- (max.deriv1-min.deriv1.0)/max.deriv1 #smaller values=faster decline relative to increase 
+hist(ratio_min_max_rate)
+curve.cuts<-list(c(0,1.0),c(1.0,2.0),c(2.0 ,max(ratio_min_max_rate)))
+par(mfrow=c(length(curve.cuts),4),mar=c(1,1,1,1))
+for(i in 1:length(curve.cuts)){
+increase.indices<-which(ratio_min_max_rate<curve.cuts[[i]][2] & ratio_min_max_rate>=curve.cuts[[i]][1] & t.max.deriv1<=25) #What is cutoff--lower values give ones that decrease less; 
+increase.indices.plot<-sample(increase.indices, size=min(50, length(increase.indices)))
+matplot(t(d1.data[increase.indices.plot,]), type='l', lty=1, bty='l')
+title(paste0("Observed ",i))
+matplot(t(fit1[increase.indices.plot,]), type='l', lty=1, bty='l')
+title(paste0("Smooth Observed ",i))
+matplot(t(deriv1[increase.indices.plot,]), type='l', lty=1, bty='l')
+abline(h=0, col='red')
+title("1st Derivative")
+matplot(t(deriv2[increase.indices.plot,]), type='l', lty=1, bty='l')
+abline(h=0, col='red')
+title("2nd Derivative")
+}
+flatest.grp<-which(ratio_min_max_rate<curve.cuts[[1]][2] & ratio_min_max_rate>=curve.cuts[[1]][1] & t.max.deriv1<=30) 
 increasing.samples<-d1a[flatest.grp, c(1:6)]
 increasing.samples<-increasing.samples[order(increasing.samples$st),]
 increasing.samples
 ```
 
+
+
 #Evaluate characteristics of curves that have smaller or larger values based on our simple classifier
 ```{r correlate_flatness}
-mod.df<-cbind.data.frame(ratio_min_max_rate=ratio_min_max_rate,id=d1a$ID, st=d1a$st, anaerobic=as.factor(d1a$anaerobic), t.max.deriv1=t.max.deriv1, temp= as.factor(d1a$temp))
-mod1<-lme(ratio_min_max_rate ~ st+ t.max.deriv1 + temp*anaerobic , random=~1|id, data=mod.df[mod.df$anaerobic !='0',] )  
+mod.df<-cbind.data.frame(ratio_min_max_rate=ratio_min_max_rate,id=d1a$ID, st=d1a$st, anaerobic=as.factor(d1a$anaerobic),Diagnosis=as.factor(d1a$Diagnosis), t.max.deriv1=t.max.deriv1, temp= as.factor(d1a$temp))
+mod1<-lme(ratio_min_max_rate ~ st+  t.max.deriv1 + temp*anaerobic , random=~1|id, data=mod.df[mod.df$anaerobic !='0',] )  
 round(summary(mod1)$tTable,3)
 coef1<-mod1$coefficients$fixed
 coef.st<-coef1[substr(names(coef1),1,2)=='st']
@@ -178,36 +206,54 @@ coef.st<-coef1[substr(names(coef1),1,2)=='st']
 print(sort(coef.st))
 ```
 
+Does the pattern differ between IPD and carriage isolates (dx=5 vs dx=0)? No evidence that it does. 
+```{r dx.effect}
+mod1<-lm(ratio_min_max_rate ~ st+  t.max.deriv1 + temp*anaerobic +Diagnosis, data=mod.df[mod.df$anaerobic !='0' & mod.df$temp %in% c('33','35','37'), ] )  
+summary(mod1)
+```
+
+
 Evaluating the interaction between temperature and oxygen; we can see that curves are flatter in aerobic conditions with catalase. (bigger values=greater declines)
 
 ```{r flatness.int}
   interaction.plot(mod.df$temp, mod.df$anaerobic, mod.df$ratio_min_max_rate, bty='l')
    title('Interaction of temperature and oxygen')
    
-   ps2.mid<-mod.df[mod.df$temp %in% c('33','35','37'),]
-     interaction.plot(ps2.mid$st, ps2.mid$anaerobic, ps2.mid$ratio_min_max_rate, bty='l')
+   ps2.mid<-mod.df[mod.df$temp %in% c('33','35','37') & mod.df$anaerobic %in% c('1','2'),]
+     interaction.plot(ps2.mid$anaerobic,ps2.mid$st,  ps2.mid$ratio_min_max_rate, bty='l')
    title('Interaction of ST and oxygen')
 ```
-#Same thing but restrict to 33-37C and stratify by aerobic vs anaerobic
-```{r correlate_flatness}
+
+Same thing but restrict to 33-37C and stratify by aerobic vs anaerobic
+
+```{r correlate_flatness2}
 mod.df<-cbind.data.frame(ratio_min_max_rate=ratio_min_max_rate,id=d1a$ID, st=d1a$st, anaerobic=as.factor(d1a$anaerobic), t.max.deriv1=t.max.deriv1, temp= as.factor(d1a$temp))
 mod2<-lme(ratio_min_max_rate ~ st+ t.max.deriv1 + temp*anaerobic , random=~1|id, data=mod.df[mod.df$anaerobic !='0' & mod.df$temp %in% c('33','35','37'),] )  
-round(summary(mod1)$tTable,3)
+#round(summary(mod2)$tTable,3)
 coef2<-mod2$coefficients$fixed
 coef.st2<-coef2[substr(names(coef2),1,2)=='st']
 #sort(coef.st)
 print(sort(coef.st2))
-
-mod3<-lme(ratio_min_max_rate ~ st*anaerobic+ t.max.deriv1 + temp  , random=~1|id, data=mod.df[mod.df$anaerobic %in% c('1','2') & mod.df$temp %in% c('33','35','37'),] ) 
-round(summary(mod3)$tTable,3)
-coef3<-mod3$coefficients$fixed
-coef.st3<-coef3[substr(names(coef3),1,2)=='st']
-#print(sort(coef.st3))
-
 ```
 
-#Compile covariates; generate average pre-vaccine carriage variable
-```{r covar_setup}
+Aerobic (catalase) only
+```{r correlate_flatness2a}
+mod4<-lme(ratio_min_max_rate ~ st+ t.max.deriv1 + temp  , random=~1|id, data=mod.df[mod.df$anaerobic %in% c('2') & mod.df$temp %in% c('33','35','37'),] ) 
+#round(summary(mod4)$tTable,3)
+coef4<-mod4$coefficients$fixed
+coef.st4<-coef4[substr(names(coef4),1,2)=='st']
+print(sort(coef.st4))
+```
+Anaerobic only
+```{r correlate_flatness2b}
+mod4<-lme(ratio_min_max_rate ~ st+ t.max.deriv1 + temp  , random=~1|id, data=mod.df[mod.df$anaerobic %in% c('1') & mod.df$temp %in% c('33','35','37'),] ) 
+#round(summary(mod4)$tTable,3)
+coef4<-mod4$coefficients$fixed
+coef.st4<-coef4[substr(names(coef4),1,2)=='st']
+print(sort(coef.st4))
+```
+
+```{r covar_setup, echo=FALSE}
 #Covariate data
 cov1<-read.csv('pneumo_master v2.csv')
 cov1$st<-as.character(cov1$ST)
@@ -220,12 +266,61 @@ cov1$GREECECARRN[is.na(cov1$GREECECARRN)]<-0
 cov1$ave_carr_pre<-apply( cbind(cov1$MASSCARR01, cov1$OSMANCARRN, cov1$SLEEMANCARRN, cov1$NORWAYCARR_PRE, cov1$TROTTERCARRN, cov1$GREECECARRN), 1, mean, na.rm=TRUE )
 cov1$st[cov1$st=='6A/C']<-'6A'
 carr.comp<-merge(mod.df,cov1, by='st' )
+carr.comp2<-carr.comp[carr.comp$anaerobic %in% c('1','2') &carr.comp$temp %in% c('33','35','37') & !is.na(carr.comp$ratio_min_max_rate) ,]
+
+#CFR Harboe
+  ds<-carr.comp2[,c('ratio_min_max_rate','anaerobic','t.max.deriv1', 'temp','id' )]
+  ds<-ds[complete.cases(ds),]
+```
+#What about CPS knockout strains vs parents?
+#WHat about CPS switch variants?
+
+Tigr4 CPS switch and KO variants; doesn't show clear difference. ST14 might have more of a plateau before declining. But ratio of min max deriv is same for 14 and CPS-; nand bigger declines for TIGR5 and TIGR19F
+
+```{r tigr, echo=FALSE}
+tigr1<-d1a[d1a$Diagnosis==8 &d1a$temp==33 & d1a$anaerobic==2 ,]
+matplot(t(tigr1[,7:40]), bty='l', type='l', col=c('black','red','blue','green'), lty=c(1,2,3,4))
+legend(0,0.3, legend=tigr1$st,col=c('black','red','blue','green'), lty=c(1,2,3,4))
+
+cbind(tigr1$st,ratio_min_max_rate[which(d1a$Diagnosis==8 &d1a$temp==33 & d1a$anaerobic==2 )]
+)
+```
+
+#Cps knockouts
+
+10A and 10A KO (CDC strain); Doesn't show clear effect of removing capsule. All strains have nice plateau
+
+```{r ko10A, echo=FALSE}
+ko10A.select<-which(d1a$Diagnosis==9 & d1a$temp==33 & d1a$anaerobic==2 & d1a$st=='10A-')
+cps10A.select<-which(d1a$Diagnosis==5 & d1a$temp==33 & d1a$anaerobic==2 &d1a$st=='10A')
+
+matplot(t(d1a[c(ko10A.select,cps10A.select),7:40]), bty='l', type='l', col=c('black','red','red'), lty=c(1,2))
+legend(0,0.3, legend=c('CPS-','10A', '10A'),col=c('black','red', 'red'), lty=c(1,2))
+```
+
+15B and 15B KO (CDC 15B strain); No clear effect of removing capsule on plateau; CPS- seems to reach lower OD but has mre of a plateau (no decline)
+```{r ko15B, echo=FALSE}
+ko15B.select<-which(d1a$Diagnosis==9 & d1a$temp==33 & d1a$anaerobic==2 & d1a$st=='15B-')
+cps15B.select<-which(d1a$Diagnosis==5 & d1a$temp==33 & d1a$anaerobic==2 & d1a$ID=='CDC_15B')
+
+matplot(t(d1a[c(ko15B.select,cps15B.select),7:40]), bty='l', type='l', col=c('black','red','red'), lty=c(1,2))
+legend(0,0.3, legend=c('CPS-','15B', '15B'),col=c('black','red', 'red'), lty=c(1,2))
+```
+
+6B and 6B KO strain (603/603:Janus); No notable effect f knocking out the capsule on growth pattern
+```{r ko6B, echo=FALSE}
+ko6B.select<-which(d1a$Diagnosis==7 & d1a$temp==33 & d1a$anaerobic==2 )
+
+
+matplot(t(d1a[c(ko6B.select),7:40]), bty='l', type='l', col=c('red','black'), lty=c(1,2))
+legend(0,0.3, legend=c('6B','CPS-'),col=c('red','black'), lty=c(1,2))
 ```
 
 
-
-#Analyze association between growth curve pattern and epi/Ps characteristics
+##Analyze association between growth curve pattern and epi/Ps characteristics
 These analyses are basically the same as regression above, but drop serotype fixed effect and instead include serotype characteristics. This shows correlation with Ps complexity and the presence of uronic acids (more complex Ps, bigger crash;more uronic acid, smaller crash) 
+
+#Case fatality ratio (Harboe)
 ```{r epi_cor}
 carr.comp2<-carr.comp[carr.comp$anaerobic %in% c('1','2') &carr.comp$temp %in% c('33','35','37') & !is.na(carr.comp$ratio_min_max_rate) ,]
 
@@ -236,6 +331,11 @@ carr.comp2<-carr.comp[carr.comp$anaerobic %in% c('1','2') &carr.comp$temp %in% c
   round(summary(reg.cfr)$tTable,3)
    plot(carr.comp2$ratio_min_max_rate, carr.comp2$CFRHARBOE, col='white')
    text(carr.comp2$ratio_min_max_rate, carr.comp2$CFRHARBOE, carr.comp2$st)
+```
+
+Polysaccharide complexity
+```{r epi_cor2}
+carr.comp2<-carr.comp[carr.comp$anaerobic %in% c('1','2') &carr.comp$temp %in% c('33','35','37') & !is.na(carr.comp$ratio_min_max_rate) ,]
 
  #Total carbon
   ds<-carr.comp2[,c('ratio_min_max_rate', 'TOTALCARBONREPEAT','anaerobic','t.max.deriv1', 'temp','id' )]
@@ -244,8 +344,12 @@ carr.comp2<-carr.comp[carr.comp$anaerobic %in% c('1','2') &carr.comp$temp %in% c
   round(summary(reg.carbon)$tTable,3)
    plot(carr.comp2$ratio_min_max_rate, carr.comp2$TOTALCARBONREPEAT, col='white')
    text(carr.comp2$ratio_min_max_rate, carr.comp2$TOTALCARBONREPEAT, carr.comp2$st)
+```
 
- #Invasiveness AJE paper--inverse variance weights
+Invasiveness (AJE paper)--inverse variance weights(note regression not weighted)
+```{r epi_cor3}
+carr.comp2<-carr.comp[carr.comp$anaerobic %in% c('1','2') &carr.comp$temp %in% c('33','35','37') & !is.na(carr.comp$ratio_min_max_rate) ,]
+
    inv1<-read.csv('mcmc_invasive_single_stage.csv')
    inv1$st=as.character(inv1$st)
    inv1$st[inv1$st=='6A/C']<-'6A'
@@ -256,10 +360,13 @@ carr.comp2<-carr.comp[carr.comp$anaerobic %in% c('1','2') &carr.comp$temp %in% c
     symbols(sqrt(ds$ratio_min_max_rate), ds$log.inv.age1, sqrt(ds$log.inv.prec.age1/pi),inches=0.35,     
             bty='l',fg="white", bg=trans.red,         xlab="Ratio increasing/decreasing Rates", ylab="log(Invasiveness")
    text(sqrt(ds$ratio_min_max_rate), inv2$log.inv.age1, inv2$st, cex=0.75)
-  reg.inv<-lme(sqrt(ratio_min_max_rate) ~ log.inv.age1 + anaerobic +t.max.deriv1 + temp , random=~1|id, data=ds )
+  reg.inv<-lme(ratio_min_max_rate ~ log.inv.age1 + anaerobic +t.max.deriv1 + temp , random=~1|id, data=ds )
   round(summary(reg.inv)$tTable,3)
-  
- #PS components
+```
+
+Specific polysaccharide components (GlcA/GalA or NAc sugars)
+```{r epi_cor4}
+carr.comp2<-carr.comp[carr.comp$anaerobic %in% c('1','2') &carr.comp$temp %in% c('33','35','37') & !is.na(carr.comp$ratio_min_max_rate) ,]
    ps1<-read.csv('PS Composition_SS_final.csv')
    ps1$st<-as.character(ps1$Serotype)
    ps2<-merge(carr.comp2, ps1, by='st' , all=TRUE)
@@ -271,13 +378,12 @@ carr.comp2<-carr.comp[carr.comp$anaerobic %in% c('1','2') &carr.comp$temp %in% c
    plot(as.factor(ps2$uronic[ps2$anaerobic=='1']), ps2$ratio_min_max_rate[ps2$anaerobic=='1'])
    plot(as.factor(ps2$uronic[ps2$anaerobic=='2']), ps2$ratio_min_max_rate[ps2$anaerobic=='2'])
    
-      ds<-ps2[ps2$anaerobic!='0',c('ratio_min_max_rate', 'uronic','NAC','anaerobic','t.max.deriv1', 'temp','id' )]
+      ds<-ps2[ps2$anaerobic!='0',c('ratio_min_max_rate', 'uronic','NAC','anaerobic','t.max.deriv1', 'temp','id')]
    ds<-ds[complete.cases(ds),]
    reg.ps<-lme(ratio_min_max_rate ~ uronic +NAC + anaerobic +t.max.deriv1 + temp + anaerobic*temp, random=~1|id, data=ds )
      round(summary(reg.ps)$tTable,3)
-   
-
 ```
+
 
 #Does association between CPS component and growth vary by temp?
 In Adrienn's experiments, she found that adding purified CPS had a big effect at 37, no effect or even inhibitory at 33C. Here it appears affect of uronic strongest at 33C with anaerobic; weaker at 33C aerobic 37 anaerobic in par with 33 aerobic; 37 anaerobic no effect
