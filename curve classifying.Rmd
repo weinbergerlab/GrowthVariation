@@ -144,9 +144,13 @@ Only consider curves that have max growth rate earlier than 10 hours. Otherwise,
 trans.black<-rgb(0,0,0, alpha=0.3)
 
 ratio_min_max_rate<- (max.deriv1-min.deriv1.0)/max.deriv1 #smaller values=faster decline relative to increase 
+#subset for shreyas
+ds.shreyas<-cbind.data.frame(ratio_min_max_rate, d1a )
+ds.shreyas<-ds.shreyas[ds.shreyas$temp==33 & ds.shreyas$anaerobic==2,c('ratio_min_max_rate','st','anaerobic','temp' ,'ID','ID2', 'Diagnosis')]
+write.csv(ds.shreyas, 'ds.shreyas.csv')
+
 hist(ratio_min_max_rate)
 
-hist()
 curve.cuts<-list(c(0,1.1),c(1.1,2.0),c(2.0 ,max(ratio_min_max_rate)))
 par(mfrow=c(length(curve.cuts),4),mar=c(1,1,1,1))
 for(i in 1:length(curve.cuts)){
@@ -176,6 +180,7 @@ Should show up as a double hump on the 1st derivative. 11A, 3, 8, 18A pop out on
 trans.black<-rgb(0,0,0, alpha=0.3)
 
 ratio_min_max_rate<- (max.deriv1-min.deriv1.0)/max.deriv1 #smaller values=faster decline relative to increase 
+ratio_for_shreyas<-ratio_min_max_rate[]
 hist(ratio_min_max_rate)
 curve.cuts<-list(c(0,1.0),c(1.0,1.5),c(1.5,2.0),c(2.0 ,max(ratio_min_max_rate)))
 par(mfrow=c(length(curve.cuts),4),mar=c(1,1,1,1))
