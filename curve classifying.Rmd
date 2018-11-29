@@ -149,7 +149,7 @@ ds.shreyas<-cbind.data.frame(ratio_min_max_rate, d1a )
 ds.shreyas<-ds.shreyas[ds.shreyas$temp==33 & ds.shreyas$anaerobic==2,c('ratio_min_max_rate','st','anaerobic','temp' ,'ID','ID2', 'Diagnosis')]
 write.csv(ds.shreyas, 'ds.shreyas.csv')
 
-hist(ratio_min_max_rate)
+hist(ds.shreyas$ratio_min_max_rate)
 
 curve.cuts<-list(c(0,1.1),c(1.1,2.0),c(2.0 ,max(ratio_min_max_rate)))
 par(mfrow=c(length(curve.cuts),4),mar=c(1,1,1,1))
