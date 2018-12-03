@@ -366,6 +366,18 @@ dev.off()
   mod4<-lme(max.od  ~ st + anaerobic +Diagnosis+ temp +st*anaerobic,  random = ~ 1|ID,data=sub)
   summary(mod4)
   test4<- interactionMeans(mod4, factors=c('anaerobic','st'))
+
+  #For maile:
+  sub<-d1b[d1b$Diagnosis %in% c(0,1,2,3,4,5,6) &d1b$anaerobic %in% c(0,1,2)
+           &d1b$temp %in% c(33,35,37),]
+  sub$anaerobic<-factor(sub$anaerobic)
+  sub$temp<-factor(sub$temp)
+  sub$Diagnosis<-factor(sub$Diagnosis)
+    mod4a.maile<-lme(max.od  ~ st + anaerobic +Diagnosis+ temp +st*anaerobic,  random = ~ 1|ID,data=sub)
+  summary(mod4a.maile)
+  test4.maile<- interactionMeans(mod4a.maile, factors=c('anaerobic','st'))
+  write.csv(test4.maile, 'st.effect.csv')
+  
   test4$st.num<-as.numeric(test4$st)
   test4$lcl<-test4$`adjusted mean` -1.96*test4$`std. error`
   test4$ucl<-test4$`adjusted mean` +1.96*test4$`std. error`
@@ -444,6 +456,7 @@ tiff('fig 4 st o2 effect.tiff',width=15, height=5, units='in', res=200)
       mod4<-lme(max.od  ~ st + anaerobic + temp +st*anaerobic,  random = ~ 1|ID,data=sub)
       #summary(mod4)
       test4<- interactionMeans(mod4, factors=c('anaerobic','st'))
+
       #plot(test4, multiple=FALSE, bty='l')
       test4$lcl<-test4$`adjusted mean` -1.96*test4$`std. error`
       test4$ucl<-test4$`adjusted mean` +1.96*test4$`std. error`
