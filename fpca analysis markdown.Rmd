@@ -90,19 +90,22 @@ d1a<-d1a[d1a$temp>=30 & d1a$temp<=39,] #Restrict to 30-39C temperatures (reading
 
 ```
 
+##Simpler; just fit spline to data, calculate derivative
+
 #Prepare data for FPCA analysis
 Extract the fitted values and 1st and 2nd derivatives using fitted() function
 
 ```{r prepFPCA}
 Y.list<- split(d1a[,-c(1:8, (48+8+1):ncol(d1a))], as.factor(1:nrow(d1a)))
+d1.data<-d1a[,-c(1:8, (48+8+1):ncol(d1a))]
 Y.list<-lapply(Y.list, function(x) as.numeric(x[1,])) #List of OD600 values
 T.list<-lapply(Y.list, function(x) (1:length(x))/2 ) #List of times (h)
 fpca.growth<-FPCA(Y.list, T.list, optns= list(dataType='Dense', plot=TRUE))
 pct.var.pca<-fpca.growth$lambda/sum(fpca.growth$lambda)*100 #percent of variation  associated with each component
 
-fitted.all<-fitted(fpca.growth,K = 3,derOptns = list(p = 0, bw = 1.01 , kernelType = 'epan') ) #fitted
-derivs.all<-fitted(fpca.growth,K = 3,derOptns = list(p = 1, bw = 1.01 , kernelType = 'epan') ) #1st deriv
-derivs2.all<-fitted(fpca.growth,K = 3,derOptns = list(p = 2, bw = 1.01 , kernelType = 'epan') )#2nd deriv
+fitted.all<-fitted(fpca.growth,K = 3,derOptns = list(p = 0,  kernelType = 'epan') ) #fitted
+derivs.all<-fitted(fpca.growth,K = 3,derOptns = list(p = 1,  kernelType = 'epan') ) #1st deriv
+derivs2.all<-fitted(fpca.growth,K = 3,derOptns = list(p = 2,  kernelType = 'epan') )#2nd deriv
 
 #Extract PCs
 pcs<-as.data.frame(fpca.growth$xiEst )
@@ -143,22 +146,26 @@ With first derivative: if density increases then decreases, should have large po
 
 Simple classifier:  (max.deriv-min.deriv)/ Max(deriv1). If this value is >1, then decline is faster than then the max exponential increase; if decline  e of decrease equals max rate of increase.  closer to 1 indicates flat
 
+Only consider curves that have max growth rate earlier than 10 hours. Otherwise, can't evaluate properly whether it ultimately declines.
 ```{r curve.classify}
 #Ratio of max rate of increase vs max rate of decrease if decreases
   trans.black<-rgb(0,0,0, alpha=0.3)
 
 ratio_min_max_rate<- (max.deriv1-min.deriv1.0)/max.deriv1 #smaller values=faster decline relative to increase 
 hist(ratio_min_max_rate)
-curve.cuts<-list(c(0,1),c(1.0,2.0),c(2.0 ,max(ratio_min_max_rate)))
-par(mfrow=c(length(curve.cuts),3),mar=c(1,1,1,1))
+curve.cuts<-list(c(0,1.0),c(1.0,2.0),c(2.0 ,max(ratio_min_max_rate)))
+par(mfrow=c(length(curve.cuts),4),mar=c(1,1,1,1))
 for(i in 1:length(curve.cuts)){
-increase.indices<-which(ratio_min_max_rate<curve.cuts[[i]][2] & ratio_min_max_rate>=curve.cuts[[i]][1]) #What is cutoff--lower values give ones that decrease less
-matplot(t(fitted.all[increase.indices,]), type='l', lty=1, bty='l')
+increase.indices<-which(ratio_min_max_rate<curve.cuts[[i]][2] & ratio_min_max_rate>=curve.cuts[[i]][1] & t.max.deriv1<=15) #What is cutoff--lower values give ones that decrease less; 
+increase.indices.plot<-sample(increase.indices, size=min(20, length(increase.indices)))
+matplot(t(d1.data[increase.indices.plot,]), type='l', lty=1, bty='l')
+title(paste0("Observed ",i))
+matplot(t(fitted.all[increase.indices.plot,]), type='l', lty=1, bty='l')
 title(paste0("Smooth Observed ",i))
-matplot(t(derivs.all[increase.indices,]), type='l', lty=1, bty='l')
+matplot(t(derivs.all[increase.indices.plot,]), type='l', lty=1, bty='l')
 abline(h=0, col='red')
 title("1st Derivative")
-matplot(t(derivs2.all[increase.indices,]), type='l', lty=1, bty='l')
+matplot(t(derivs2.all[increase.indices.plot,]), type='l', lty=1, bty='l')
 abline(h=0, col='red')
 title("2nd Derivative")
 }
