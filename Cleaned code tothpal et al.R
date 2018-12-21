@@ -441,7 +441,7 @@ dev.off()
     cis.mod4.int<-cis.mod4.int[order(cis.mod4.int$est.),]
     cis.mod4.int$st.num<-1:nrow(cis.mod4.int)
     cis.mod4.int[,1:3]<-cis.mod4.int[,1:3] - min(cis.mod4.int[,2]) #subtract to center on 0
-    tiff('st o2 effect.tiff',width=10.6, height=5.3, units='in', res=400)
+    tiff('fig 4 st o2 effect.tiff',width=10.6, height=5.3, units='in', res=400)
       plot(cis.mod4.int$st.num,cis.mod4.int[,2], bty='l', ylim=c(-0.02,0.18), pch=16, xaxt='n',xlab='',
                 ylab="Max density aerobic (with catalase) - anaerobic")
         arrows(cis.mod4.int$st.num,cis.mod4.int$lower,cis.mod4.int$st.num,cis.mod4.int$upper, code=3, angle=90, length=0.0,  col='gray')
@@ -461,7 +461,7 @@ inv1<-read.csv('C:/Users/dmw63/Desktop/My documents h/INVASIVENESS/mcmc_invasive
 
 
 #test whether effect of ST varies by anaerobic
-tiff('fig 4 st o2 effect.tiff',width=15, height=5, units='in', res=200)
+tiff('fig 5 st o2 effect.tiff',width=15, height=5, units='in', res=200)
     par(mfrow=c(2,1),mar=c(2,3,1,1))
     st.position<-sort(as.character(unique(d1b$st)))
     '%!in%' <- function(x,y)!('%in%'(x,y))
@@ -482,6 +482,7 @@ tiff('fig 4 st o2 effect.tiff',width=15, height=5, units='in', res=200)
       sub$temp<-factor(sub$temp)
       sub$Diagnosis<-factor(sub$Diagnosis)
       table(sub$st, sub$anaerobic)
+      print(nrow(sub))
       mod4<-lme(max.od  ~ st + anaerobic + temp +st*anaerobic,  random = ~ 1|ID,data=sub)
       #summary(mod4)
       test4<- interactionMeans(mod4, factors=c('anaerobic','st'))
