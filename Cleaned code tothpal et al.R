@@ -97,8 +97,10 @@ require(caret)
           d1a.agg$temp<-as.numeric(as.character(d1a.agg$temp))
           d1a.agg$st<-as.character(d1a.agg$st)
           tiff('plot1.tiff',width=11, height=5.3, units='in', res=400)
-          par(mfcol=c(3,4),mar=c(2,3,1,1))
-          for(dx.select in c(0,4,1,5)){ #Body sites
+         # par(mfcol=c(3,4),mar=c(2,3,1,1))
+          par(mfrow=c(1,3),mar=c(2,3,1,1))
+         # for(dx.select in c(0,4,1,5)){ #Body sites
+           for(dx.select in c(0)){ #Body sites
             for(ana.select in c(0,2,1)){  #Catalase, anaerobic, aertobic
               id.composite<-paste0(d1a.agg$ID,d1a.agg$st,d1a.agg$temp,d1a.agg$anaerobic)
               d1.df<-d1a.agg[d1a.agg$st==st.select & duplicated(id.composite)==FALSE & d1a.agg$anaerobic %in% c(ana.select) & d1a.agg$Diagnosis %in% c(dx.select) &d1a.agg$ID %in% id.select.19F, ]
@@ -112,8 +114,11 @@ require(caret)
                text(max.ts.time, max.ts.od+0.02, d1.df$temp, col=ts.col[temp.lab], cex=0.75 )
             }
           }
-          dev.off()
+    dev.off()
           
+    
+    
+    
   #######SUPPLEMENTARY FIGURE PLOTTING TIGR ISOLATES
           ####CHANGE OPTIONS HERE FOR PLOT SELECTION
           sub1<-par(mfrow=c(1,1))
@@ -260,6 +265,28 @@ require(caret)
   d1b$temp<-factor(d1b$temp)
   d1b$anaerobic<-factor(d1b$anaerobic)
 
+  #Make a plot showing the overall patterns of max OD by temp and site of isolation
+  library(reshape2)
+  sub1<-d1b[,c('temp','st','ID', 'Diagnosis','max.od','anaerobic')]
+  mo1.m<-melt(sub1, id=c('temp','st','ID', 'Diagnosis','anaerobic'))
+  mo1.c<-acast(mo1.m[mo1.m$variable=='max.od',], temp~ID~Diagnosis~anaerobic, fun.aggregate=mean, drop=FALSE)
+  mo1.c<-mo1.c[order(as.numeric(dimnames(mo1.c)[[1]])),,,]
+  trans.black=rgb(0,0,0,alpha=0.2)
+  par(mfrow=c(2,3))
+  matplot(as.numeric(dimnames(mo1.c)[[1]]), mo1.c[,,'5','0'], type='l',bty='l', ylim=c(0,0.6), main='IPD, aerobic no catalase', col=trans.black, lty=1) #IPD
+  matplot(as.numeric(dimnames(mo1.c)[[1]]), mo1.c[,,'5','2'], type='l',bty='l', ylim=c(0,0.6), main='IPD, aerobic with catalase', col=trans.black, lty=1)
+  matplot(as.numeric(dimnames(mo1.c)[[1]]), mo1.c[,,'5','1'], type='l',bty='l', ylim=c(0,0.6), main='IPD, Anaerobic', col=trans.black, lty=1)
+  
+  matplot(as.numeric(dimnames(mo1.c)[[1]]), mo1.c[,,'0','0'], type='l',bty='l', ylim=c(0,0.6), main='Carriage, aerobic no catalase', col=trans.black, lty=1) #IPD
+  matplot(as.numeric(dimnames(mo1.c)[[1]]), mo1.c[,,'0','2'], type='l',bty='l', ylim=c(0,0.6), main='Carriage, aerobic with catalase', col=trans.black, lty=1)
+  matplot(as.numeric(dimnames(mo1.c)[[1]]), mo1.c[,,'0','1'], type='l',bty='l', ylim=c(0,0.6), main='Carriage, Anaerobic', col=trans.black, lty=1)
+  
+  
+  
+  #d1b[d1b$ID=='H71',c(1:10)]
+  #d1b[d1b$ID=='2011M8',c(1:10)] #carriage strain from Dutch collection, only tested at 33C
+  
+  
 #################################################################################
 #################################################################################
 ##REGRESSION MODELS
@@ -269,7 +296,7 @@ require(caret)
 
 
 #Test which serotypes grow best without catalase
-  mod2<-lme(max.od  ~ st +  temp + Diagnosis, random = ~ 1|ID, data=d1b[d1b$anaerobic==0 &d1b$Diagnosis==5,])
+  mod2<-lme(max.od  ~ st +  temp + Diagnosis, random = ~ 1|ID, data=d1b[d1b$anaerobic==0 &d1b$Diagnosis %in% c(0,5),])
   summary(mod2)
 
 ##Test whether effect of oxygen is different depending on sit eof origin of the strains
@@ -283,6 +310,7 @@ tiff('fig 2 site o2 effect.tiff',width=7.5, height=2.7, units='in', res=200)
       d1c$st<-factor(d1c$st)
       d1c$anaerobic<-factor(d1c$anaerobic)
       d1c$Diagnosis<-factor(d1c$Diagnosis)
+      print(nrow(d1c))
     mod2<-lme(max.od  ~ st + anaerobic + temp + Diagnosis +Diagnosis*anaerobic,  random = ~ 1|ID,data=d1c)
     summary(mod2)
     test<- interactionMeans(mod2, factors=c('Diagnosis','anaerobic'))
@@ -328,6 +356,7 @@ dev.off()
         sub$st<-factor(sub$st)
         sub$anaerobic<-factor(sub$anaerobic)
         sub$Diagnosis<-factor(sub$Diagnosis)
+        print(nrow(sub))
         mod3<-lme(max.od  ~ st + anaerobic + temp + anaerobic*temp,  random = ~ 1|ID,data=sub)
         summary(mod3)
         test3<- interactionMeans(mod3, factors=c('anaerobic','temp'))
