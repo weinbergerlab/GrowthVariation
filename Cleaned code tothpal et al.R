@@ -588,7 +588,7 @@ coef.st1<-coef.fe.mod.st[substr(names(coef.fe.mod.st),1,2)=='st']
 mod.st<-lme(max.od  ~ st +  temp * Diagnosis ,  random = ~ 1|ID,data=d1b[d1b$anaerobic %in% c('2') & d1b$Diagnosis %in% c('0','5'),])
 coef.fe.mod.st<-fixef(mod.st)
 coef.st2<-coef.fe.mod.st[substr(names(coef.fe.mod.st),1,2)=='st']
-coef.st.df3<-cbind.data.frame('coef.max.od.2'=coef.st2,'coef.max.od.1'=coef.st1,'coef.max.od.1.2'=coef.st1.2, 'st'=substring(names(coef.st),3))
+coef.st.df3<-cbind.data.frame('coef.max.od.2'=coef.st2,'coef.max.od.1'=coef.st1,'coef.max.od.1.2'=coef.st1.2, 'st'=substring(names(coef.st1.2),3))
 cor(coef.st.df3[,1:3])
 
 ###############################################
@@ -617,7 +617,7 @@ mod.st.t<-lme(max.deriv2.time  ~ st +  temp * Diagnosis ,  random = ~ 1|ID,
                                    & max.deriv2.time$Diagnosis %in% c('0','5'),])
 coef.fe.mod.st.time<-fixef(mod.st.t)
 coef.st.time.2<-coef.fe.mod.st.time[substr(names(coef.fe.mod.st.time),1,2)=='st']
-coef.st.time.df<-cbind.data.frame('coef.st.time1.2'=coef.st.time.1.2,'coef.st.time.2'=coef.st.time.2,'coef.st.time.1'=coef.st.time.1, 'st'=substring(names(coef.st.time),3))
+coef.st.time.df<-cbind.data.frame('coef.st.time1.2'=coef.st.time.1.2,'coef.st.time.2'=coef.st.time.2,'coef.st.time.1'=coef.st.time.1, 'st'=substring(names(coef.st.time.1),3))
 cor(coef.st.time.df[,1:3])
 ###############################################
 ##############################################
@@ -626,13 +626,14 @@ cor(coef.st.time.df[,1:3])
 ds.sub<-max.deriv2.time[max.deriv2.time$Diagnosis %in% c('0','5'),]
 ds.sub$Diagnosis<-factor(ds.sub$Diagnosis)
 spl.ds1<-split(ds.sub, list(ds.sub$anaerobic, ds.sub$temp, ds.sub$Diagnosis))
-ave.max.deriv2.time<-round(sapply(spl.ds1, function(x) median(x$max.deriv2.time,na.rm=TRUE)))
+ave.max.deriv2.time<-round(sapply(spl.ds1, function(x) median(x$max.deriv2.time,na.rm=TRUE)))+2 # Look 2 time periods (1 hour) AFTEr the start of log-growth
 labs1<-matrix(unlist(strsplit(names(ave.max.deriv2.time), '\\.')), ncol=3, byrow=T)
 ave.max.deriv2.time<-cbind.data.frame(ave.max.deriv2.time, labs1)
 names(ave.max.deriv2.time)<-c('ave.max.deriv2.time','anaerobic','temp','Diagnosis' )
 ds1<-merge(d1b, ave.max.deriv2.time, by=c('anaerobic', 'temp','Diagnosis'))
 od.fixed.time<-apply(ds1, 1, function(x) x[(8+as.numeric(x[length(x)] ))]) 
 od.fixed.time<-cbind.data.frame(ds1[,1:8], od.fixed.time=as.numeric(as.character((od.fixed.time))))
+hist(od.fixed.time$od.fixed.time)
 ##Models
 mod.st.fixed.od<-lme(od.fixed.time  ~ st +  anaerobic*temp * Diagnosis ,  random = ~ 1|ID,
                      data=od.fixed.time[od.fixed.time$anaerobic %in% c('1','2') 
@@ -652,7 +653,7 @@ mod.st.fixed.od<-lme(od.fixed.time  ~ st +  temp * Diagnosis ,  random = ~ 1|ID,
 coef.fe.mod.st.fixed.od<-fixef(mod.st.fixed.od)
 coef.st.fixed.od.2<-coef.fe.mod.st.fixed.od[substr(names(coef.fe.mod.st.fixed.od),1,2)=='st']
 coef.st.fixed.od.df<-cbind.data.frame('coef.st.fixed.od.1.2'=coef.st.fixed.od.1.2,'coef.st.fixed.od.1'=coef.st.fixed.od.1, 
-                                      'coef.st.fixed.od.2'=coef.st.fixed.od.2,'st'=substring(names(coef.st.fixed.od),3))
+                                      'coef.st.fixed.od.2'=coef.st.fixed.od.2,'st'=substring(names(coef.st.fixed.od.2),3))
 cor(coef.st.fixed.od.df[,1:3])
 
 ##what isolates are tested under what conditions?
