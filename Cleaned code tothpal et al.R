@@ -54,7 +54,7 @@ require(caret)
   ## blank based on t=0
   d1a$X1[d1a$X1>d1a$X2]<- d1a$X2[d1a$X1>d1a$X2]
   d1a[,7:ncol(d1a)]<-d1a[,7:ncol(d1a)] - (d1a$X1) #
-  d1a[,7:ncol(d1a)][d1a[,7:ncol(d1a)]<0]<-0  #Values must be >=0
+  #d1a[,7:ncol(d1a)][d1a[,7:ncol(d1a)]<0]<-0  #Values must be >=0
 
   #Fix coding for isogenic strains
   d1a$st[d1a$st=="NT"]<-"cps-"
