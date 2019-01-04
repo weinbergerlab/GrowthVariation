@@ -285,11 +285,11 @@ require(caret)
   
   #d1b[d1b$ID=='H71',c(1:10)]
   #d1b[d1b$ID=='2011M8',c(1:10)] #carriage strain from Dutch collection, only tested at 33C
-  
   ###SPLINE ANALYSIS TO GET DERIVATIVES Use smooth.spline function, which is same thing they do in the grofit package; use a fixed smoothing parameter for simplicity
   #library(fdapace)
   Y.list<- split(d1a[,-c(1:8, (48+8+1):ncol(d1a))], as.factor(1:nrow(d1a)))
   d1.data<-d1a[,-c(1:8, (48+8+1):ncol(d1a))]
+  
   Y.list<-lapply(Y.list, function(x) as.numeric(x[1,])) #List of OD600 values
   T.list<-lapply(Y.list, function(x) (1:length(x))/2 ) #List of times (h)
   # fpca.growth<-FPCA(Y.list, T.list, optns= list(dataType='Dense', plot=FALSE))
@@ -304,12 +304,12 @@ require(caret)
   fitted.all<-t(sapply(spl1, function(x) c(predict(x)$y, rep(NA, 48-length(predict(x)$y ))  )))
   derivs.all<-t(sapply(spl1, function(x) c(predict(x, deriv=1)$y, rep(NA, 48-length(predict(x)$y ))  )))
   derivs2.all<-t(sapply(spl1, function(x) c(predict(x, deriv=2)$y, rep(NA, 48-length(predict(x)$y ))  )))
-
+  
   #When is 2nd deriv at max? ie start of log phase
   max.deriv2.time<-apply(derivs2.all,1,function(x) which(x==max(x[1:24], na.rm=TRUE))[1] ) #capture peak that occures within first 12 h
   max.deriv2.time<-cbind.data.frame(d1a[,1:8],max.deriv2.time)
   
-  par(mfrow=c(4,1))
+  par(mfrow=c(4,1),mar=c(2,2,1,1))
   for(i in 1:20){
     plot(log(Y.list[[i]]+0.01), type='l', bty='l')
     title(i)
@@ -328,6 +328,7 @@ require(caret)
 #Regression model; controls for repeated measurements of same isolate across conditions with random intercept
   mod1<-lme(max.od  ~ st + anaerobic + temp + Diagnosis, random = ~ 1|ID, data=d1b)
   summary(mod1)
+
 
 #Test which serotypes grow best without catalase
   mod2<-lme(max.od  ~ st +  temp + Diagnosis, random = ~ 1|ID, data=d1b[d1b$anaerobic==0 &d1b$Diagnosis %in% c(0,5),])
@@ -562,198 +563,151 @@ dev.off()
 ##restrict to those serotypes present in both carriage and IPD
   mod6a<-lme(max.od  ~ st + anaerobic + Diagnosis+ Diagnosis*anaerobic,  random = ~ 1|ID,data=d1b[d1b$temp==38 & d1b$st  %in% st.keep.dx,])
   summary(mod6a)
-  ###############################################
-  ##############################################  
-  ###############################################
-  ##############################################  
-  ###############################################
-  ##############################################
-  ###############################################
-  #EVALuate 3 ways to measure serotype effect:
-  #1) Max OD achieved for a growth curve
-  #2) Time to max second derivative (when is growth rate increasing most)
-  #3) OD at average value for #2 for a given temp/anaerobic/Diagnostic level
-  #Test with aerobic and anaerobic together, and then separate, so have 9 
-  #measures total
-   ##############################################
-    #ST Effect  on max.od  
-    mod.st<-lme(max.od  ~ st +  anaerobic*temp * Diagnosis ,  random = ~ 1|ID,data=d1b[d1b$anaerobic %in% c('1','2') & d1b$Diagnosis %in% c('0','5'),])
-    coef.fe.mod.st<-fixef(mod.st)
-    coef.st1.2<-coef.fe.mod.st[substr(names(coef.fe.mod.st),1,2)=='st']
 
-    mod.st<-lme(max.od  ~ st +  temp * Diagnosis ,  random = ~ 1|ID,data=d1b[d1b$anaerobic %in% c('1') & d1b$Diagnosis %in% c('0','5'),])
-    coef.fe.mod.st<-fixef(mod.st)
-    coef.st1<-coef.fe.mod.st[substr(names(coef.fe.mod.st),1,2)=='st']
+##SIMPLE version--calculaye max OD by serotype, body site, ambient vs cat
+  mean1<-aggregate(d1b$max.od, list(d1b$st, d1b$Diagnosis, d1b$anaerobic, d1b$temp), mean)
+  names(mean1)<-c('st','Diagnosis','anaerobic','temp','max.od')
+  m.mean1<-melt(mean1, id=c("st",'Diagnosis','anaerobic','temp'))
+  c.mean1<-as.data.frame(cast(m.mean1, st+temp+Diagnosis~anaerobic))
+  c.mean1<-c.mean1[c.mean1$`2`>=0.05,]
+  c.mean1$ratio_1_2<-c.mean1$`1`/c.mean1$`2`  #Anerobic vs aerobi with catalase
+  c.mean1$ratio_1_0<-c.mean1$`1`/c.mean1$`0`  #Anerobic vs aerobi without catalase
+  plot(c.mean1$ratio_1_2,c.mean1$ratio_1_0)
+  c.mean1<-c.mean1[order(-c.mean1$ratio_1_2),]
+  c.mean1[c.mean1$temp==33 &c.mean1$Diagnosis==0,] #carriage isolates
+  c.mean1[c.mean1$temp==33 &c.mean1$Diagnosis==5,] #IPD isolates
 
-    mod.st<-lme(max.od  ~ st +  temp * Diagnosis ,  random = ~ 1|ID,data=d1b[d1b$anaerobic %in% c('2') & d1b$Diagnosis %in% c('0','5'),])
-    coef.fe.mod.st<-fixef(mod.st)
-    coef.st2<-coef.fe.mod.st[substr(names(coef.fe.mod.st),1,2)=='st']
-    coef.st.df3<-cbind.data.frame('coef.max.od.2'=coef.st2,'coef.max.od.1'=coef.st1,'coef.max.od.1.2'=coef.st1.2, 'st'=substring(names(coef.st),3))
-    cor(coef.st.df3[,1:3])
-    
-    ###############################################
-    ##############################################
-    ##############################################
-    #ST Effect  on max.deriv2.time; ie time to max rate of growth
-    #This effect is stronger when look at anaerobic vs aerobic+catalase (-0.61 (P=0.02) vs -0.2 (P>0.05))
-    lag.length.mod<-lme(max.deriv2.time  ~ st +anaerobic+  temp  ,  random = ~ 1|ID,
-                  data=max.deriv2.time[max.deriv2.time$anaerobic %in% c('1','2') 
-                                       & max.deriv2.time$Diagnosis %in% c('5'),])
-    summary(lag.length.mod)
-    mod.st.t<-lme(max.deriv2.time  ~ st +  anaerobic*temp * Diagnosis ,  random = ~ 1|ID,
-                    data=max.deriv2.time[max.deriv2.time$anaerobic %in% c('1','2') 
-                                          & max.deriv2.time$Diagnosis %in% c('0','5'),])
-    coef.fe.mod.st.time<-fixef(mod.st.t)
-    coef.st.time.1.2<-coef.fe.mod.st.time[substr(names(coef.fe.mod.st.time),1,2)=='st']
+  c.mean1$log.ratio<-log(c.mean1$ratio_1_2)
+  t1<-lm(log.ratio~st+temp+Diagnosis, data=c.mean1[c.mean1$log.ratio<=10 & c.mean1$log.ratio>=-10,])
+  summary(t1)
+  
+#Test if ratio of ST at high temps is associated with invasiveness
+  cov1<-read.csv('C:/Users/dmw63/Desktop/My documents h/OLD LIPSITCH LAB DATA/pneumo_master v2.csv')
+  cov1$st<-as.character(cov1$ST)
+  c.mean1$st<-as.character(c.mean1$st)
+  c.mean2<-merge(c.mean1,cov1, by='st', all=TRUE)
+  c.mean.sub<-c.mean2[c.mean2$Diagnosis %in% c(0)& c.mean2$temp %in% c(33), ]
+  plot(c.mean.sub$CFRHARBOE, c.mean.sub$log.ratio, col='white')
+  text(c.mean.sub$CFRHARBOE, c.mean.sub$log.ratio, c.mean.sub$st)
+  cor(c.mean.sub$CFRHARBOE, c.mean.sub$log.ratio, method='spearman', use='pairwise.complete.obs')
+  plot(sqrt(c.mean.sub$ATTACKRATESLEEMAN), c.mean.sub$log.ratio, col='white')
+  text(sqrt(c.mean.sub$ATTACKRATESLEEMAN), c.mean.sub$log.ratio, c.mean.sub$st)
+  cor( c.mean.sub[,c('log.ratio','CFRHARBOE','TOTALCARBONREPEAT', 'GREECECARRN','BRUEGCARRN','ATTACKRATESLEEMAN','DUTCHCARRN','OSMANCARRN','SLEEMANCARRN')], method='spearman', use='pairwise.complete.obs')
+  plot(sqrt(c.mean.sub$TOTALCARBONREPEAT), c.mean.sub$log.ratio, col='white')
+  text(sqrt(c.mean.sub$TOTALCARBONREPEAT), c.mean.sub$log.ratio, c.mean.sub$st)
 
-    mod.st.t<-lme(max.deriv2.time  ~ st +  temp * Diagnosis ,  random = ~ 1|ID,
-                  data=max.deriv2.time[max.deriv2.time$anaerobic %in% c('1') 
-                                      & max.deriv2.time$Diagnosis %in% c('0','5'),])
-    coef.fe.mod.st.time<-fixef(mod.st.t)
-    coef.st.time.1<-coef.fe.mod.st.time[substr(names(coef.fe.mod.st.time),1,2)=='st']
+#Compare to regression coefficients, which averages over and adjust fors all disease states and temperatures
+  coef1<-summary(t1)$coefficients[,'Estimate']
+  coef.st<-coef1[substr(names(coef1),1,2)=='st']
+  coef.st.label<-substring(names(coef.st), 3)
+  coef.st<-cbind.data.frame(coef.st,'st'=coef.st.label)
+  coef.cor<-merge(coef.st,cov1, by='st', all=TRUE)
+  cor(coef.cor[,c('coef.st','CFRHARBOE','TOTALCARBONREPEAT', 'GREECECARRN','BRUEGCARRN','ATTACKRATESLEEMAN','DUTCHCARRN','OSMANCARRN','SLEEMANCARRN')], method='spearman', use='pairwise.complete.obs')
+  plot(sqrt(coef.cor$CFRHARBOE), coef.cor$coef.st, col='white')
+  text(sqrt(coef.cor$CFRHARBOE), coef.cor$coef.st, c.mean.sub$st)
 
-    mod.st.t<-lme(max.deriv2.time  ~ st +  temp * Diagnosis ,  random = ~ 1|ID,
-                  data=max.deriv2.time[max.deriv2.time$anaerobic %in% c('2') 
-                                      & max.deriv2.time$Diagnosis %in% c('0','5'),])
-    coef.fe.mod.st.time<-fixef(mod.st.t)
-    coef.st.time.2<-coef.fe.mod.st.time[substr(names(coef.fe.mod.st.time),1,2)=='st']
-    coef.st.time.df<-cbind.data.frame('coef.st.time1.2'=coef.st.time.1.2,'coef.st.time.2'=coef.st.time.2,'coef.st.time.1'=coef.st.time.1, 'st'=substring(names(coef.st.time),3))
-    cor(coef.st.time.df[,1:3])
-###############################################
-##############################################
-    
-    #calculate OD at ave max.deriv2.time for a temp.aernarobic/diagnosis combo
-    ds.sub<-max.deriv2.time[max.deriv2.time$Diagnosis %in% c('0','5'),]
-    ds.sub$Diagnosis<-factor(ds.sub$Diagnosis)
-    spl.ds1<-split(ds.sub, list(ds.sub$anaerobic, ds.sub$temp, ds.sub$Diagnosis))
-    ave.max.deriv2.time<-round(sapply(spl.ds1, function(x) median(x$max.deriv2.time,na.rm=TRUE)))
-    labs1<-matrix(unlist(strsplit(names(ave.max.deriv2.time), '\\.')), ncol=3, byrow=T)
-    ave.max.deriv2.time<-cbind.data.frame(ave.max.deriv2.time, labs1)
-    names(ave.max.deriv2.time)<-c('ave.max.deriv2.time','anaerobic','temp','Diagnosis' )
-    ds1<-merge(d1b, ave.max.deriv2.time, by=c('anaerobic', 'temp','Diagnosis'))
-    od.fixed.time<-apply(ds1, 1, function(x) x[(8+as.numeric(x[length(x)] ))]) 
-    od.fixed.time<-cbind.data.frame(ds1[,1:8], od.fixed.time=as.numeric(as.character((od.fixed.time))))
-    ##Models
-    mod.st.fixed.od<-lme(od.fixed.time  ~ st +  anaerobic*temp * Diagnosis ,  random = ~ 1|ID,
-                  data=od.fixed.time[od.fixed.time$anaerobic %in% c('1','2') 
-                                      & od.fixed.time$Diagnosis %in% c('0','5'),])
-    coef.fe.mod.st.fixed.od<-fixef(mod.st.fixed.od)
-    coef.st.fixed.od.1.2<-coef.fe.mod.st.fixed.od[substr(names(coef.fe.mod.st.fixed.od),1,2)=='st']
 
-    mod.st.fixed.od<-lme(od.fixed.time  ~ st +  temp*Diagnosis ,  random = ~ 1|ID,
-                         data=od.fixed.time[od.fixed.time$anaerobic %in% c('1') 
-                                            & od.fixed.time$Diagnosis %in% c('0','5'),])
-    coef.fe.mod.st.fixed.od<-fixef(mod.st.fixed.od)
-    coef.st.fixed.od.1<-coef.fe.mod.st.fixed.od[substr(names(coef.fe.mod.st.fixed.od),1,2)=='st']
-    
-    mod.st.fixed.od<-lme(od.fixed.time  ~ st +  temp * Diagnosis ,  random = ~ 1|ID,
-                         data=od.fixed.time[od.fixed.time$anaerobic %in% c('2') 
-                                            & od.fixed.time$Diagnosis %in% c('0','5'),])
-    coef.fe.mod.st.fixed.od<-fixef(mod.st.fixed.od)
-    coef.st.fixed.od.2<-coef.fe.mod.st.fixed.od[substr(names(coef.fe.mod.st.fixed.od),1,2)=='st']
-    coef.st.fixed.od.df<-cbind.data.frame('coef.st.fixed.od.1.2'=coef.st.fixed.od.1.2,'coef.st.fixed.od.1'=coef.st.fixed.od.1, 
-                                          'coef.st.fixed.od.2'=coef.st.fixed.od.2,'st'=substring(names(coef.st.fixed.od),3))
-    cor(coef.st.fixed.od.df[,1:3])
-    
-    ##what isolates are tested under what conditions?
-    # check1<-d1b[,c('ID', 'temp', 'anaerobic')]
-    # check1$one<-1
-    # check1.m<-melt(check1, id=c('ID', 'temp', 'anaerobic'))
-    # check1.c<-acast(check1.m, ID~anaerobic+temp)
-    # 
-    
-    
-    ##Coefficients for Maile
-    #MERGE together all coefficients
-    maile.coef1<-merge(coef.st.time.df,coef.st.fixed.od.df, by='st', all=T )
-    maile.coef2<-merge(coef.st.df3,maile.coef1, by='st', all=T )
-    maile.coef3<-maile.coef2[,c('st', "coef.max.od.1","coef.max.od.2", "coef.st.time1.2", "coef.st.fixed.od.1.2")]
-    write.csv(maile.coef3, 'st.reg.coeffs.csv')
-    
-   ######CORRELATE ST COEFFFICIENTS VS OTHER VALUES
-   cov1<-read.csv('C:/Users/dmw63/Desktop/My documents h/OLD LIPSITCH LAB DATA/pneumo_master v2.csv')
-   cov1$st<-as.character(cov1$ST)
-   cov1$MASSCARR01[is.na(cov1$MASSCARR01)]<-0
-   cov1$OSMANCARRN[is.na(cov1$OSMANCARRN)]<-0
-   cov1$SLEEMANCARRN[is.na(cov1$SLEEMANCARRN)]<-0
-   cov1$NORWAYCARR_PRE[is.na(cov1$NORWAYCARR_PRE)]<-0
-   cov1$TROTTERCARRN[is.na(cov1$TROTTERCARRN)]<-0
-   cov1$GREECECARRN[is.na(cov1$GREECECARRN)]<-0
-   cov1$ave_carr_pre<-apply( cbind(cov1$MASSCARR01, cov1$OSMANCARRN, cov1$SLEEMANCARRN, cov1$NORWAYCARR_PRE, cov1$TROTTERCARRN,
-                                   cov1$GREECECARRN), 1, mean, na.rm=TRUE )
-   cov1$st[cov1$st=='6A/C']<-'6A'
+ps1<-read.csv('C:/Users/dmw63/Desktop/My documents h/LAB/pneumo metabolic genes/PS Composition_SS_final.csv')
+  ps1$st<-as.character(ps1$Serotype)
+  ps2<-merge(coef.cor, ps1, by='st' , all=TRUE)
+  ps2$NAC<-0
+  ps2$NAC[ps2$GlcNAc==1 | ps2$GalNAc==1 | ps2$ManNAc==1 |  ps2$ManNAcA==1 |ps2$FucNAc==1 ] <-1
+  wilcox.test(coef.st ~ NAC, data=ps2) 
+  wilcox.test(coef.st ~ GlcNAc, data=ps2) 
+  wilcox.test(coef.st ~ GlcA, data=ps2) 
+
+################################################
+#######corr with carriage
+  d1.sub<-d1a[,c(1,2,3,4,5,7:48)]
+  d1.sub<-d1.sub[d1.sub$Diagnosis %in% c(0,5),]
+  d1.sub$conditions<-paste(d1.sub$anaerobic ,d1.sub$temp, d1.sub$Diagnosis, sep="_" )
+  d1.sub<-d1.sub[,-which(names(d1.sub) %in% c('anaerobic','temp','t.midpoint','Diagnosis','ID2','ID'))]
+  table(d1.sub$conditions, d1.sub$st)
+  test<-melt(d1.sub, id=c('st','conditions'), na.rm=TRUE)
+  test2.1<-cast(test, st~variable+conditions, mean)
+  test2a<-as.data.frame(test2.1)
+  miss.prop<-apply(test2a,2, function(x) sum(is.nan(x)) )/nrow(test2a)
+  test2<-test2a[,miss.prop<0.5] #remove columns for which there are bservations for < half serotypes
+  mat.text2<-t(test2[,-1])
+#SIMPLE IMPUTE MISSING VALUES FROM MATRIX...by row (first transpose, so we are taking mean of time point and filling that in)
+    impute.matrix <- function (matrix) {  ##https://gist.github.com/Jfortin1/d4888d68359a36fbda60
+      missing <- which(is.na(matrix) | !is.finite(matrix), arr.ind=TRUE)
+      if (length(missing)!=0){
+        for (j in 1:nrow(missing)){
+          mean <- mean(matrix[missing[j,1],][is.finite(matrix[missing[j,1],])], na.rm=TRUE) #Mean of row
+          matrix[missing[j,1],missing[j,2]] <- mean
+        }
+      }
+      matrix
+    }
+    test3<-as.matrix(t(impute.matrix(mat.text2)))
+    test3.df<-as.data.frame(test3)
+    names(test3.df)<-names(test2)[-1]
+    test4<-cbind.data.frame(factor(test2$st), test3.df)
+    names(test4)[1]<-'st'
+#Compile carriage data into average
+    cov1$MASSCARR01[is.na(cov1$MASSCARR01)]<-0
+    cov1$OSMANCARRN[is.na(cov1$OSMANCARRN)]<-0
+    cov1$SLEEMANCARRN[is.na(cov1$SLEEMANCARRN)]<-0
+    cov1$NORWAYCARR_PRE[is.na(cov1$NORWAYCARR_PRE)]<-0
+    cov1$TROTTERCARRN[is.na(cov1$TROTTERCARRN)]<-0
+    cov1$GREECECARRN[is.na(cov1$GREECECARRN)]<-0
+    cov1$ave_carr_pre<-apply( cbind(cov1$MASSCARR01, cov1$OSMANCARRN, cov1$SLEEMANCARRN, cov1$NORWAYCARR_PRE, cov1$TROTTERCARRN,
+                          cov1$GREECECARRN), 1, mean, na.rm=TRUE )
+    cov1$st[cov1$st=='6A/C']<-'6A'
+    carr.comp<-merge(test4,cov1, by='st' )
+    #Test all time points, temps, and O2 levels, extract aic scores
+  
+ #################################################################
+ #################################################################
+ #Do principal component analysis on the growth data before regression
+ par(mfrow=c(1,1))
+   growth.dat<-test4[,-1]
+   colvar<-apply(growth.dat,2,var)
+   growth.dat2<-growth.dat[,colvar>0]
+  
+   pc1<-prcomp(growth.dat2, center=TRUE,scale.=TRUE)
+    summary(pc1)
+   pc2<-cbind.data.frame( test4[,1],pc1$x)
+   names(pc2)[1]<-'st'
+   pc2$st<-as.character(pc2$st)
+   #Duplicate 15BC and rename 15B and C to merge in with other data
+   pc.15b<-pc2[pc2$st=='15BC',]
+   pc.15b$st<-'15B'
+   pc2<-rbind.data.frame(pc2, pc.15b)
+   pc2$st[pc2$st=='15BC']<-'15C'
+   write.csv(pc2,'growth.pca.csv')
+   carr.comp<-merge(pc2,cov1, by='st' )
+   reg.pc<-glm(sqrt(carr.comp$ave_carr_pre)~ PC1+PC2+PC3+PC4+PC5+PC6, data=carr.comp)
+   summary(reg.pc)
+   plot(carr.comp$PC2, carr.comp$ave_carr_pre, col='white', bty='l')
+   text(carr.comp$PC2, carr.comp$ave_carr_pre, carr.comp$st)
+   carr.comp[order(carr.comp$PC2),c('PC2', 'st')]
+   cor.test(x=carr.comp$PC2, y=carr.comp$ave_carr_pre, method = 'spearman')
    
-   
-   #MERGE together all coefficients
-   carr.comp1<-merge(coef.st.time.df,cov1, by='st', all.y=T )
-   carr.comp2<-merge(coef.st.fixed.od.df,carr.comp1, by='st', all.y=T )
-   carr.comp<-merge(coef.st.df3,carr.comp2, by='st', all.y=T )
-   
-   #Corr with carriage data
-   carr.comp$coef.st[carr.comp$st=='14']<-0 #ref
-   carr.comp$coef.st.time[carr.comp$st=='14']<-0 #ref
-   reg.pc1<-glm(sqrt(carr.comp$ave_carr_pre)~ coef.st.fixed.od.2, data=carr.comp)
-   summary(reg.pc1)
-   reg.pc2<-glm(sqrt(carr.comp$ave_carr_pre)~ coef.st.fixed.od.1, data=carr.comp)
-   summary(reg.pc2)
-   plot(carr.comp$coef.st.fixed.od.1, carr.comp$ave_carr_pre)
-    reg.pc3<-glm(sqrt(carr.comp$ave_carr_pre)~ coef.max.od.2, data=carr.comp)
-   summary(reg.pc3)
-   reg.pc4<-glm(sqrt(carr.comp$ave_carr_pre)~ coef.max.od.1, data=carr.comp)
-   summary(reg.pc4)
-   
-   reg.pc5<-glm(sqrt(carr.comp$ave_carr_pre)~ coef.st.time.2 , data=carr.comp)
-   summary(reg.pc5)
-   reg.pc6<-glm(sqrt(carr.comp$ave_carr_pre)~ coef.st.time.1 , data=carr.comp)
-   summary(reg.pc6)
-   par(mfrow=c(1,1))
-   plot(carr.comp$coef.st.fixed.od.1, carr.comp$ave_carr_pre, col='white', bty='l')
-   text(carr.comp$coef.st.fixed.od.1, carr.comp$ave_carr_pre, carr.comp$st)   
-   
-
  #CFR Harboe
-   reg.pc.cfr1<-glm(carr.comp$CFRHARBOE~ coef.max.od.1 , data=carr.comp)
-   summary(reg.pc.cfr1)
-   reg.pc.cfr2<-glm(carr.comp$CFRHARBOE~ coef.max.od.2 , data=carr.comp)
-   summary(reg.pc.cfr2)
-   reg.pc.cfr3<-glm(carr.comp$CFRHARBOE~ coef.st.fixed.od.1 , data=carr.comp)
-   summary(reg.pc.cfr3)
-   reg.pc.cfr4<-glm(carr.comp$CFRHARBOE~ coef.st.fixed.od.2 , data=carr.comp)
-   summary(reg.pc.cfr4)
-   reg.pc.cfr5<-glm(carr.comp$CFRHARBOE~ coef.st.time.1 , data=carr.comp)
-   summary(reg.pc.cfr5)
-   reg.pc.cfr6<-glm(carr.comp$CFRHARBOE~ coef.st.time.2 , data=carr.comp)
-   summary(reg.pc.cfr6)
-   
-   plot(carr.comp$coef.st.fixed.od.1, carr.comp$CFRHARBOE, col='white')
-   text(carr.comp$coef.st.fixed.od.1, carr.comp$CFRHARBOE, carr.comp$st)
+   reg.pc.cfr<-glm(carr.comp$CFRHARBOE~ PC1+PC2+PC3+PC4+PC5+PC6 , data=carr.comp)
+   summary(reg.pc.cfr)
+   plot(carr.comp$PC6, carr.comp$CFRHARBOE, col='white')
+   text(carr.comp$PC6, carr.comp$CFRHARBOE, carr.comp$st)
 
  #Total carbon
-   reg.pc.carbon1<-glm(carr.comp$TOTALCARBONREPEAT~ coef.max.od.1, data=carr.comp)
-   summary(reg.pc.carbon1)
-   reg.pc.carbon2<-glm(carr.comp$TOTALCARBONREPEAT~ coef.max.od.2, data=carr.comp)
-   summary(reg.pc.carbon2)
-   plot(carr.comp$coef.max.od.2, carr.comp$TOTALCARBONREPEAT, col='white')
-   text(carr.comp$coef.max.od.2, carr.comp$TOTALCARBONREPEAT, carr.comp$st)
-
+   reg.pc.carbon<-glm(carr.comp$TOTALCARBONREPEAT~ PC1+PC2+PC3+PC4+PC5+PC6, data=carr.comp)
+   summary(reg.pc.carbon)
+   plot(carr.comp$PC2, carr.comp$TOTALCARBONREPEAT, col='white')
+   text(carr.comp$PC2, carr.comp$TOTALCARBONREPEAT, carr.comp$st)
+   cor.test(x=carr.comp$PC2, y=carr.comp$TOTALCARBONREPEAT, method = 'spearman')
+   
  #Invasiveness AJE paper--inverse variance weights
    inv1<-read.csv('C:/Users/dmw63/Desktop/My documents h/INVASIVENESS/mcmc_invasive_single_stage.csv')
    inv1$st=as.character(inv1$st)
    inv1$st[inv1$st=='6A/C']<-'6A'
    inv2<-merge(carr.comp, inv1, by='st' , all=TRUE)
    trans.red<-rgb(1,0,0, alpha=0.5)
-   symbols(inv2$coef.st.fixed.od.1, inv2$log.inv.age1, sqrt(inv2$log.inv.prec.age1/pi),inches=0.35, bty='l',fg="white", bg=trans.red, xlab="Early od", ylab="log(Invasiveness")
-   text(inv2$coef.st.fixed.od.1, inv2$log.inv.age1, inv2$st, cex=0.75)
-   reg.inv<-lm(inv2$log.inv.age1~ coef.max.od.2, data=inv2, weights=log.inv.prec.age1)
+   symbols(inv2$PC2, inv2$log.inv.age1, sqrt(inv2$log.inv.prec.age1/pi),inches=0.35, bty='l',fg="white", bg=trans.red, xlab="PC2", ylab="log(Invasiveness")
+   text(inv2$PC2, inv2$log.inv.age1, inv2$st, cex=0.75)
+   reg.inv<-lm(inv2$log.inv.age1~ PC1+PC2+PC3+PC4+PC5+PC6, data=inv2, weights=log.inv.prec.age1)
    summary(reg.inv)
-   reg.inv2<-lm(inv2$log.inv.age1~ coef.max.od.1, data=inv2, weights=log.inv.prec.age1)
-   summary(reg.inv2)
-   reg.inv3<-lm(inv2$log.inv.age1~ coef.st.fixed.od.1, data=inv2, weights=log.inv.prec.age1)
-   summary(reg.inv3)
-   reg.inv4<-lm(inv2$log.inv.age1~ coef.st.fixed.od.2, data=inv2, weights=log.inv.prec.age1)
-   summary(reg.inv4)
-   reg.inv5<-lm(inv2$log.inv.age1~ coef.st.time.2, data=inv2, weights=log.inv.prec.age1)
-   summary(reg.inv5)
   
  #PS components
    ps1<-read.csv('C:/Users/dmw63/Desktop/My documents h/LAB/pneumo metabolic genes/PS Composition_SS_final.csv')
@@ -763,147 +717,55 @@ dev.off()
    ps2$NAC[ps2$GlcNAc==1 | ps2$GalNAc==1 | ps2$ManNAc==1 |  ps2$ManNAcA==1 |ps2$FucNAc==1 |ps2$PneNAc ==1] <-1
    ps2$uronic<-0
    ps2$uronic[ps2$GalA==1 |ps2$GlcA==1 ]<-1  #GlcA and GalA derived from same pathway
-   reg.nac1<-glm(ps2$NAC~ coef.max.od.1, data=ps2, family='binomial')
-      summary(reg.nac1)
-   reg.nac2<-glm(ps2$NAC~ coef.max.od.2, data=ps2, family='binomial')
-      summary(reg.nac2)
-   reg.nac3<-glm(ps2$NAC~ coef.st.fixed.od.1, data=ps2, family='binomial')
-      summary(reg.nac3)
-  reg.nac4<-glm(ps2$NAC~ coef.st.fixed.od.2, data=ps2, family='binomial')
-      summary(reg.nac4)
-  reg.nac5<-glm(ps2$NAC~ coef.st.time.2, data=ps2, family='binomial')
-      summary(reg.nac5)
-      
-      plot(ps2$NAC, ps2$coef.st)
-      wilcox.test(coef.st ~ NAC, data=ps2[!is.na(ps2$coef.st), ]) 
-      wilcox.test(coef.st ~ GlcNAc, data=ps2[!is.na(ps2$coef.st), ]) 
-      
-      reg.uronic1<-glm(ps2$uronic~ coef.max.od.1, data=ps2, family='binomial')
-      summary(reg.uronic1)
-      reg.uronic2<-glm(ps2$uronic~ coef.max.od.2, data=ps2, family='binomial')
-      summary(reg.uronic2)
-      reg.uronic3<-glm(ps2$uronic~ coef.st.fixed.od.1, data=ps2, family='binomial')
-      summary(reg.uronic3)    
-      reg.uronic4<-glm(ps2$uronic~ coef.st.time.1 , data=ps2, family='binomial')
-      summary(reg.uronic4)      
-      
-      wilcox.test(coef.st ~ uronic, data=ps2[!is.na(ps2$coef.st), ]) 
+   reg.nac<-glm(ps2$NAC~ PC2+PC3+PC4+PC5+PC6, data=ps2, family='binomial')
+      summary(reg.nac)
+      plot(ps2$NAC, ps2$PC2)
+      wilcox.test(PC2 ~ NAC, data=ps2[!is.na(ps2$PC2), ]) 
+      wilcox.test(PC2 ~ GlcNAc, data=ps2[!is.na(ps2$PC2), ]) 
+      reg.uronic<-glm(ps2$uronic~ PC1+PC2+PC3+PC4+PC5+PC6, data=ps2, family='binomial')
+      summary(reg.uronic)
+      wilcox.test(PC4 ~ uronic, data=ps2[!is.na(ps2$PC5), ]) 
    table(ps2$uronic, ps2$st)
-   plot(ps2$uronic, ps2$coef.st)
-   
-   #multivariate with both uronic and coef.st as predictors
-   reg.both<-lm( coef.max.od.1~ NAC+uronic, data=ps2)
-   summary(reg.both)
-   
-   table(ps2$uronic, ps2$NAC)
-   
+   plot(ps2$uronic, ps2$PC5)
  
+ #VIEW LOADINGS:
+     plot(pc1$rotation[,'PC2'], pc1$rotation[,'PC6'])
+     plot(pc1$x[,2], pc1$x[,4])
+     text()
+     pc2.loading<-pc1$rotation[,'PC2']
+     pc5.loading<-pc1$rotation[,'PC5']
+     pc6.loading<-pc1$rotation[,'PC6']
+     lab1<-matrix(unlist(strsplit(names(pc2.loading), split="_", fixed=TRUE)), ncol=4, nrow=length(names(pc2.loading)), byrow=TRUE)
+     lab2<-as.data.frame(lab1) 
+     names(lab2)<-c('point','anaerobic', 'temp', 'Diagnosis')
+     lab2$time<-as.numeric(gsub("X", lab2$point,replacement="", fixed=TRUE))/2
+     lab2$time[lab2$point=='max.od']<- -1
+      pc.load<-cbind.data.frame(lab2,pc2.loading,pc5.loading,pc6.loading)
+    par(mfcol=c(3,2))
+      for(i in c(1:2)){ #Body sites
+        for(j in c(1:3)){  #Catalase, anaerobic, aertobic
+          dx.select=c(0,5)[i]
+          ana.select = c(0,2,1)[j]
+          dx.lab<-c("Carriage","IPD")
+          ana.lab<-c("Aerobic", "Aerobic+Catalase", "Anaerobic")
+        sub1<-pc.load[pc.load$anaerobic %in% c(ana.select) &pc.load$Diagnosis %in% c(dx.select),]
+        temp.lab<-as.numeric(as.factor(sub1$temp))
+        plot(sub1$time, sub1$pc2.loading,  col=ts.col[temp.lab], bty='l', ylim=c(-0.06,0.06), xlab="Time (h)", ylab="PC2 rotation")
+        title(paste0(dx.lab[i]," ",ana.lab[j]))
+        abline(h=0)
+        }
+        }
+
 #Figure 6 OF PC2 vs components
 tiff('fig 6.tiff',width=8, height=4, units='in', res=300)
   
   par(mfrow=c(1,2), mar=c(4,4,1,1))
-  plot(carr.comp$coef.st, carr.comp$ave_carr_pre, col='white', bty='l', xlab='Serotype effect on growth (Density at early time point)' ,ylab='Pre-vaccine carriage')
-  text(carr.comp$coef.st, carr.comp$ave_carr_pre, carr.comp$st, xpd=NA)
+  plot(carr.comp$PC2, carr.comp$ave_carr_pre, col='white', bty='l', xlab='PC2' ,ylab='Pre-vaccine carriage')
+  text(carr.comp$PC2, carr.comp$ave_carr_pre, carr.comp$st, xpd=NA)
   
-  symbols(inv2$coef.st, inv2$log.inv.age1, sqrt(inv2$log.inv.prec.age1/pi),inches=0.1, bty='l',fg="white", bg=trans.red, xlab="PC2 (Density at early time point)", ylab="log(Invasiveness)", bty='l')
-  text(inv2$coef.st, inv2$log.inv.age1, inv2$st, cex=0.75, col='gray', adj=c(1,1), xpd=NA)
+  symbols(inv2$PC2, inv2$log.inv.age1, sqrt(inv2$log.inv.prec.age1/pi),inches=0.1, bty='l',fg="white", bg=trans.red, xlab="PC2", ylab="log(Invasiveness)", bty='l')
+  text(inv2$PC2, inv2$log.inv.age1, inv2$st, cex=0.75, col='gray', adj=c(1,1), xpd=NA)
   
 dev.off()
 
 
-############################################################
-############################################################
-#OTHER ANALYSES
-#############################################################
-##SIMPLE version--calculaye max OD by serotype, body site, ambient vs cat
-mean1<-aggregate(d1b$max.od, list(d1b$st, d1b$Diagnosis, d1b$anaerobic, d1b$temp), mean)
-names(mean1)<-c('st','Diagnosis','anaerobic','temp','max.od')
-m.mean1<-melt(mean1, id=c("st",'Diagnosis','anaerobic','temp'))
-c.mean1<-as.data.frame(cast(m.mean1, st+temp+Diagnosis~anaerobic))
-c.mean1<-c.mean1[c.mean1$`2`>=0.05,]
-c.mean1$ratio_1_2<-c.mean1$`1`/c.mean1$`2`  #Anerobic vs aerobi with catalase
-c.mean1$ratio_1_0<-c.mean1$`1`/c.mean1$`0`  #Anerobic vs aerobi without catalase
-plot(c.mean1$ratio_1_2,c.mean1$ratio_1_0)
-c.mean1<-c.mean1[order(-c.mean1$ratio_1_2),]
-c.mean1[c.mean1$temp==33 &c.mean1$Diagnosis==0,] #carriage isolates
-c.mean1[c.mean1$temp==33 &c.mean1$Diagnosis==5,] #IPD isolates
-
-c.mean1$log.ratio<-log(c.mean1$ratio_1_2)
-t1<-lm(log.ratio~st+temp+Diagnosis, data=c.mean1[c.mean1$log.ratio<=10 & c.mean1$log.ratio>=-10,])
-summary(t1)
-
-#Test if ratio of ST at high temps is associated with invasiveness
-cov1<-read.csv('C:/Users/dmw63/Desktop/My documents h/OLD LIPSITCH LAB DATA/pneumo_master v2.csv')
-cov1$st<-as.character(cov1$ST)
-c.mean1$st<-as.character(c.mean1$st)
-c.mean2<-merge(c.mean1,cov1, by='st', all=TRUE)
-c.mean.sub<-c.mean2[c.mean2$Diagnosis %in% c(0)& c.mean2$temp %in% c(33), ]
-plot(c.mean.sub$CFRHARBOE, c.mean.sub$log.ratio, col='white')
-text(c.mean.sub$CFRHARBOE, c.mean.sub$log.ratio, c.mean.sub$st)
-cor(c.mean.sub$CFRHARBOE, c.mean.sub$log.ratio, method='spearman', use='pairwise.complete.obs')
-plot(sqrt(c.mean.sub$ATTACKRATESLEEMAN), c.mean.sub$log.ratio, col='white')
-text(sqrt(c.mean.sub$ATTACKRATESLEEMAN), c.mean.sub$log.ratio, c.mean.sub$st)
-cor( c.mean.sub[,c('log.ratio','CFRHARBOE','TOTALCARBONREPEAT', 'GREECECARRN','BRUEGCARRN','ATTACKRATESLEEMAN','DUTCHCARRN','OSMANCARRN','SLEEMANCARRN')], method='spearman', use='pairwise.complete.obs')
-plot(sqrt(c.mean.sub$TOTALCARBONREPEAT), c.mean.sub$log.ratio, col='white')
-text(sqrt(c.mean.sub$TOTALCARBONREPEAT), c.mean.sub$log.ratio, c.mean.sub$st)
-
-#Compare to regression coefficients, which averages over and adjust fors all disease states and temperatures
-coef1<-summary(t1)$coefficients[,'Estimate']
-coef.st<-coef1[substr(names(coef1),1,2)=='st']
-coef.st.label<-substring(names(coef.st), 3)
-coef.st<-cbind.data.frame(coef.st,'st'=coef.st.label)
-coef.cor<-merge(coef.st,cov1, by='st', all=TRUE)
-cor(coef.cor[,c('coef.st','CFRHARBOE','TOTALCARBONREPEAT', 'GREECECARRN','BRUEGCARRN','ATTACKRATESLEEMAN','DUTCHCARRN','OSMANCARRN','SLEEMANCARRN')], method='spearman', use='pairwise.complete.obs')
-plot(sqrt(coef.cor$CFRHARBOE), coef.cor$coef.st, col='white')
-text(sqrt(coef.cor$CFRHARBOE), coef.cor$coef.st, c.mean.sub$st)
-
-ps1<-read.csv('C:/Users/dmw63/Desktop/My documents h/LAB/pneumo metabolic genes/PS Composition_SS_final.csv')
-ps1$st<-as.character(ps1$Serotype)
-ps2<-merge(coef.cor, ps1, by='st' , all=TRUE)
-ps2$NAC<-0
-ps2$NAC[ps2$GlcNAc==1 | ps2$GalNAc==1 | ps2$ManNAc==1 |  ps2$ManNAcA==1 |ps2$FucNAc==1 ] <-1
-wilcox.test(coef.st ~ NAC, data=ps2) 
-wilcox.test(coef.st ~ GlcNAc, data=ps2) 
-wilcox.test(coef.st ~ GlcA, data=ps2) 
-
-################################################
-#######corr with carriage
-d1.sub<-d1a[,c(1,2,3,4,5,7:48)]
-d1.sub<-d1.sub[d1.sub$Diagnosis %in% c(0,5),]
-d1.sub$conditions<-paste(d1.sub$anaerobic ,d1.sub$temp, d1.sub$Diagnosis, sep="_" )
-d1.sub<-d1.sub[,-which(names(d1.sub) %in% c('anaerobic','temp','t.midpoint','Diagnosis','ID2','ID'))]
-table(d1.sub$conditions, d1.sub$st)
-test<-melt(d1.sub, id=c('st','conditions'), na.rm=TRUE)
-test2.1<-cast(test, st~variable+conditions, mean)
-test2a<-as.data.frame(test2.1)
-miss.prop<-apply(test2a,2, function(x) sum(is.nan(x)) )/nrow(test2a)
-test2<-test2a[,miss.prop<0.5] #remove columns for which there are bservations for < half serotypes
-mat.text2<-t(test2[,-1])
-#SIMPLE IMPUTE MISSING VALUES FROM MATRIX...by row (first transpose, so we are taking mean of time point and filling that in)
-impute.matrix <- function (matrix) {  ##https://gist.github.com/Jfortin1/d4888d68359a36fbda60
-  missing <- which(is.na(matrix) | !is.finite(matrix), arr.ind=TRUE)
-  if (length(missing)!=0){
-    for (j in 1:nrow(missing)){
-      mean <- mean(matrix[missing[j,1],][is.finite(matrix[missing[j,1],])], na.rm=TRUE) #Mean of row
-      matrix[missing[j,1],missing[j,2]] <- mean
-    }
-  }
-  matrix
-}
-test3<-as.matrix(t(impute.matrix(mat.text2)))
-test3.df<-as.data.frame(test3)
-names(test3.df)<-names(test2)[-1]
-test4<-cbind.data.frame(factor(test2$st), test3.df)
-names(test4)[1]<-'st'
-#Compile carriage data into average
-cov1$MASSCARR01[is.na(cov1$MASSCARR01)]<-0
-cov1$OSMANCARRN[is.na(cov1$OSMANCARRN)]<-0
-cov1$SLEEMANCARRN[is.na(cov1$SLEEMANCARRN)]<-0
-cov1$NORWAYCARR_PRE[is.na(cov1$NORWAYCARR_PRE)]<-0
-cov1$TROTTERCARRN[is.na(cov1$TROTTERCARRN)]<-0
-cov1$GREECECARRN[is.na(cov1$GREECECARRN)]<-0
-cov1$ave_carr_pre<-apply( cbind(cov1$MASSCARR01, cov1$OSMANCARRN, cov1$SLEEMANCARRN, cov1$NORWAYCARR_PRE, cov1$TROTTERCARRN,
-                                cov1$GREECECARRN), 1, mean, na.rm=TRUE )
-cov1$st[cov1$st=='6A/C']<-'6A'
-carr.comp<-merge(test4,cov1, by='st' )
-#Test all time points, temps, and O2 levels, extract aic scores
