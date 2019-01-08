@@ -117,8 +117,6 @@ for(dx.select in c(0)){ #Body sites
 dev.off()
 
 
-
-
 #######SUPPLEMENTARY FIGURE PLOTTING TIGR ISOLATES
 ####CHANGE OPTIONS HERE FOR PLOT SELECTION
 sub1<-par(mfrow=c(1,1))
@@ -292,15 +290,11 @@ Y.list<- split(d1a[,-c(1:8, (48+8+1):ncol(d1a))], as.factor(1:nrow(d1a)))
 d1.data<-d1a[,-c(1:8, (48+8+1):ncol(d1a))]
 Y.list<-lapply(Y.list, function(x) as.numeric(x[1,])) #List of OD600 values
 T.list<-lapply(Y.list, function(x) (1:length(x))/2 ) #List of times (h)
-# fpca.growth<-FPCA(Y.list, T.list, optns= list(dataType='Dense', plot=FALSE))
-# pct.var.pca<-fpca.growth$lambda/sum(fpca.growth$lambda)*100 #percent of variation  associated with each component
-# 
-# fitted.all<-fitted(fpca.growth,K = 3,derOptns = list(p = 0,  kernelType = 'epan') ) #fitted
-# derivs.all<-fitted(fpca.growth,K = 3,derOptns = list(p = 1,  kernelType = 'epan') ) #1st deriv
-# derivs2.all<-fitted(fpca.growth,K = 3,derOptns = list(p = 2,  kernelType = 'epan') )#2nd deriv
-# 
-#spl1<-lapply(Y.list, function(x) smooth.spline(log(x[!is.na(x)]+0.01), cv=TRUE))
+
 spl1<-lapply(Y.list, function(x) smooth.spline(log(x[!is.na(x)]+0.01), spar=0.5)) #smooth the log-growth curve--gives mch more reliable results than smothing raw OD
+  #Spar determined empircally by trying values between 0.2 and 0.9  to find one that was adquate for many curves (ie eyeballing where the estimated
+  #start to log-grwth was vs the calculated time when 2nd derivative was at maximum. cross-validation
+  #gave unstable 
 fitted.all<-t(sapply(spl1, function(x) c(predict(x)$y, rep(NA, 48-length(predict(x)$y ))  )))
 derivs.all<-t(sapply(spl1, function(x) c(predict(x, deriv=1)$y, rep(NA, 48-length(predict(x)$y ))  )))
 derivs2.all<-t(sapply(spl1, function(x) c(predict(x, deriv=2)$y, rep(NA, 48-length(predict(x)$y ))  )))
@@ -321,6 +315,110 @@ for(i in 1:20){
   plot(derivs2.all[i,], type='l', bty='l')
   abline(v=max.deriv2.time$max.deriv2.time[i], lty=2, col='gray')
 }
+
+
+#Compare max.d and length of lag phase and max.deriv
+max.deriv<-apply(derivs.all,1,max, na.rm=T)
+comp1.gro<-cbind.data.frame(d1a[,c('max.od','ID','st','anaerobic','temp', 'Diagnosis')],max.deriv, max.deriv2.time)
+cor(comp1.gro[,c('max.od','max.deriv','max.deriv2.time')])#growth rate correlated with max.od, not with lag length
+#plot(comp1.gro$max.deriv, comp1.gro$max.od)
+cor.test(comp1.gro[,c('max.od')],comp1.gro[,c('max.deriv')] )
+cor.test(comp1.gro[,c('max.deriv2.time')],comp1.gro[,c('max.deriv')] )
+cor.test(comp1.gro[,c('max.deriv2.time')],comp1.gro[,c('max.od')] )
+
+comp1.gro.ls<-split(comp1.gro, list(comp1.gro$anaerobic, comp1.gro$temp))
+corr.grp<-lapply(comp1.gro.ls, function(x) cor(x[,c('max.od','max.deriv','max.deriv2.time')] ))
+
+
+
+
+###############################################
+#EVALuate 3 ways to measure serotype effect:
+#1) Max OD achieved for a growth curve
+#2) Time to max second derivative (when is growth rate increasing most)
+#3) OD at average value for #2 for a given temp/anaerobic/Diagnostic level
+#Test with aerobic and anaerobic together, and then separate, so have 9 
+#measures total
+##############################################
+#ST Effect  on max.od  
+mod.st<-lme(max.od  ~ st +  anaerobic*temp * Diagnosis ,  random = ~ 1|ID,data=d1b[d1b$anaerobic %in% c('1','2') & d1b$Diagnosis %in% c('0','5'),])
+coef.fe.mod.st<-fixef(mod.st)
+coef.st1.2<-coef.fe.mod.st[substr(names(coef.fe.mod.st),1,2)=='st']
+
+mod.st<-lme(max.od  ~ st +  temp * Diagnosis ,  random = ~ 1|ID,data=d1b[d1b$anaerobic %in% c('1') & d1b$Diagnosis %in% c('0','5'),])
+coef.fe.mod.st<-fixef(mod.st)
+coef.st1<-coef.fe.mod.st[substr(names(coef.fe.mod.st),1,2)=='st']
+
+mod.st<-lme(max.od  ~ st +  temp * Diagnosis ,  random = ~ 1|ID,data=d1b[d1b$anaerobic %in% c('2') & d1b$Diagnosis %in% c('0','5'),])
+coef.fe.mod.st<-fixef(mod.st)
+coef.st2<-coef.fe.mod.st[substr(names(coef.fe.mod.st),1,2)=='st']
+coef.st.df3<-cbind.data.frame('coef.max.od.2'=coef.st2,'coef.max.od.1'=coef.st1,'coef.max.od.1.2'=coef.st1.2, 'st'=substring(names(coef.st1.2),3))
+cor(coef.st.df3[,1:3])
+
+###############################################
+##############################################
+##############################################
+#ST Effect  on max.deriv2.time; ie time to max rate of growth
+#This effect is stronger when look at anaerobic vs aerobic+catalase (-0.61 (P=0.02) vs -0.2 (P>0.05))
+lag.length.mod<-lme(max.deriv2.time  ~ st +anaerobic+  temp  ,  random = ~ 1|ID,
+                    data=max.deriv2.time[max.deriv2.time$anaerobic %in% c('1','2') 
+                                         & max.deriv2.time$Diagnosis %in% c('5'),])
+summary(lag.length.mod)
+mod.st.t<-lme(max.deriv2.time  ~ st +  anaerobic*temp * Diagnosis ,  random = ~ 1|ID,
+              data=max.deriv2.time[max.deriv2.time$anaerobic %in% c('1','2') 
+                                   & max.deriv2.time$Diagnosis %in% c('0','5'),])
+coef.fe.mod.st.time<-fixef(mod.st.t)
+coef.st.time.1.2<-coef.fe.mod.st.time[substr(names(coef.fe.mod.st.time),1,2)=='st']
+
+mod.st.t<-lme(max.deriv2.time  ~ st +  temp * Diagnosis ,  random = ~ 1|ID,
+              data=max.deriv2.time[max.deriv2.time$anaerobic %in% c('1') 
+                                   & max.deriv2.time$Diagnosis %in% c('0','5'),])
+coef.fe.mod.st.time<-fixef(mod.st.t)
+coef.st.time.1<-coef.fe.mod.st.time[substr(names(coef.fe.mod.st.time),1,2)=='st']
+
+mod.st.t<-lme(max.deriv2.time  ~ st +  temp * Diagnosis ,  random = ~ 1|ID,
+              data=max.deriv2.time[max.deriv2.time$anaerobic %in% c('2') 
+                                   & max.deriv2.time$Diagnosis %in% c('0','5'),])
+coef.fe.mod.st.time<-fixef(mod.st.t)
+coef.st.time.2<-coef.fe.mod.st.time[substr(names(coef.fe.mod.st.time),1,2)=='st']
+coef.st.time.df<-cbind.data.frame('coef.st.time1.2'=coef.st.time.1.2,'coef.st.time.2'=coef.st.time.2,'coef.st.time.1'=coef.st.time.1, 'st'=substring(names(coef.st.time.1),3))
+cor(coef.st.time.df[,1:3])
+###############################################
+##############################################
+
+#calculate OD at ave max.deriv2.time for a temp.aernarobic/diagnosis combo
+ds.sub<-max.deriv2.time[max.deriv2.time$Diagnosis %in% c('0','5'),]
+ds.sub$Diagnosis<-factor(ds.sub$Diagnosis)
+spl.ds1<-split(ds.sub, list(ds.sub$anaerobic, ds.sub$temp, ds.sub$Diagnosis))
+ave.max.deriv2.time<-round(sapply(spl.ds1, function(x) median(x$max.deriv2.time,na.rm=TRUE)))+2 # Look 2 time periods (1 hour) AFTEr the start of log-growth
+labs1<-matrix(unlist(strsplit(names(ave.max.deriv2.time), '\\.')), ncol=3, byrow=T)
+ave.max.deriv2.time<-cbind.data.frame(ave.max.deriv2.time, labs1)
+names(ave.max.deriv2.time)<-c('ave.max.deriv2.time','anaerobic','temp','Diagnosis' )
+ds1<-merge(d1b, ave.max.deriv2.time, by=c('anaerobic', 'temp','Diagnosis'))
+od.fixed.time<-apply(ds1, 1, function(x) x[(8+as.numeric(x[length(x)] ))]) 
+od.fixed.time<-cbind.data.frame(ds1[,1:8], od.fixed.time=as.numeric(as.character((od.fixed.time))))
+hist(od.fixed.time$od.fixed.time)
+##Models
+mod.st.fixed.od<-lme(od.fixed.time  ~ st +  anaerobic*temp * Diagnosis ,  random = ~ 1|ID,
+                     data=od.fixed.time[od.fixed.time$anaerobic %in% c('1','2') 
+                                        & od.fixed.time$Diagnosis %in% c('0','5'),])
+coef.fe.mod.st.fixed.od<-fixef(mod.st.fixed.od)
+coef.st.fixed.od.1.2<-coef.fe.mod.st.fixed.od[substr(names(coef.fe.mod.st.fixed.od),1,2)=='st']
+
+mod.st.fixed.od<-lme(od.fixed.time  ~ st +  temp*Diagnosis ,  random = ~ 1|ID,
+                     data=od.fixed.time[od.fixed.time$anaerobic %in% c('1') 
+                                        & od.fixed.time$Diagnosis %in% c('0','5'),])
+coef.fe.mod.st.fixed.od<-fixef(mod.st.fixed.od)
+coef.st.fixed.od.1<-coef.fe.mod.st.fixed.od[substr(names(coef.fe.mod.st.fixed.od),1,2)=='st']
+
+mod.st.fixed.od<-lme(od.fixed.time  ~ st +  temp * Diagnosis ,  random = ~ 1|ID,
+                     data=od.fixed.time[od.fixed.time$anaerobic %in% c('2') 
+                                        & od.fixed.time$Diagnosis %in% c('0','5'),])
+coef.fe.mod.st.fixed.od<-fixef(mod.st.fixed.od)
+coef.st.fixed.od.2<-coef.fe.mod.st.fixed.od[substr(names(coef.fe.mod.st.fixed.od),1,2)=='st']
+coef.st.fixed.od.df<-cbind.data.frame('coef.st.fixed.od.1.2'=coef.st.fixed.od.1.2,'coef.st.fixed.od.1'=coef.st.fixed.od.1, 
+                                      'coef.st.fixed.od.2'=coef.st.fixed.od.2,'st'=substring(names(coef.st.fixed.od.2),3))
+cor(coef.st.fixed.od.df[,1:3])
 
 #################################################################################
 #################################################################################
@@ -568,93 +666,7 @@ summary(mod6a)
 ##############################################  
 ###############################################
 ##############################################
-###############################################
-#EVALuate 3 ways to measure serotype effect:
-#1) Max OD achieved for a growth curve
-#2) Time to max second derivative (when is growth rate increasing most)
-#3) OD at average value for #2 for a given temp/anaerobic/Diagnostic level
-#Test with aerobic and anaerobic together, and then separate, so have 9 
-#measures total
-##############################################
-#ST Effect  on max.od  
-mod.st<-lme(max.od  ~ st +  anaerobic*temp * Diagnosis ,  random = ~ 1|ID,data=d1b[d1b$anaerobic %in% c('1','2') & d1b$Diagnosis %in% c('0','5'),])
-coef.fe.mod.st<-fixef(mod.st)
-coef.st1.2<-coef.fe.mod.st[substr(names(coef.fe.mod.st),1,2)=='st']
 
-mod.st<-lme(max.od  ~ st +  temp * Diagnosis ,  random = ~ 1|ID,data=d1b[d1b$anaerobic %in% c('1') & d1b$Diagnosis %in% c('0','5'),])
-coef.fe.mod.st<-fixef(mod.st)
-coef.st1<-coef.fe.mod.st[substr(names(coef.fe.mod.st),1,2)=='st']
-
-mod.st<-lme(max.od  ~ st +  temp * Diagnosis ,  random = ~ 1|ID,data=d1b[d1b$anaerobic %in% c('2') & d1b$Diagnosis %in% c('0','5'),])
-coef.fe.mod.st<-fixef(mod.st)
-coef.st2<-coef.fe.mod.st[substr(names(coef.fe.mod.st),1,2)=='st']
-coef.st.df3<-cbind.data.frame('coef.max.od.2'=coef.st2,'coef.max.od.1'=coef.st1,'coef.max.od.1.2'=coef.st1.2, 'st'=substring(names(coef.st1.2),3))
-cor(coef.st.df3[,1:3])
-
-###############################################
-##############################################
-##############################################
-#ST Effect  on max.deriv2.time; ie time to max rate of growth
-#This effect is stronger when look at anaerobic vs aerobic+catalase (-0.61 (P=0.02) vs -0.2 (P>0.05))
-lag.length.mod<-lme(max.deriv2.time  ~ st +anaerobic+  temp  ,  random = ~ 1|ID,
-                    data=max.deriv2.time[max.deriv2.time$anaerobic %in% c('1','2') 
-                                         & max.deriv2.time$Diagnosis %in% c('5'),])
-summary(lag.length.mod)
-mod.st.t<-lme(max.deriv2.time  ~ st +  anaerobic*temp * Diagnosis ,  random = ~ 1|ID,
-              data=max.deriv2.time[max.deriv2.time$anaerobic %in% c('1','2') 
-                                   & max.deriv2.time$Diagnosis %in% c('0','5'),])
-coef.fe.mod.st.time<-fixef(mod.st.t)
-coef.st.time.1.2<-coef.fe.mod.st.time[substr(names(coef.fe.mod.st.time),1,2)=='st']
-
-mod.st.t<-lme(max.deriv2.time  ~ st +  temp * Diagnosis ,  random = ~ 1|ID,
-              data=max.deriv2.time[max.deriv2.time$anaerobic %in% c('1') 
-                                   & max.deriv2.time$Diagnosis %in% c('0','5'),])
-coef.fe.mod.st.time<-fixef(mod.st.t)
-coef.st.time.1<-coef.fe.mod.st.time[substr(names(coef.fe.mod.st.time),1,2)=='st']
-
-mod.st.t<-lme(max.deriv2.time  ~ st +  temp * Diagnosis ,  random = ~ 1|ID,
-              data=max.deriv2.time[max.deriv2.time$anaerobic %in% c('2') 
-                                   & max.deriv2.time$Diagnosis %in% c('0','5'),])
-coef.fe.mod.st.time<-fixef(mod.st.t)
-coef.st.time.2<-coef.fe.mod.st.time[substr(names(coef.fe.mod.st.time),1,2)=='st']
-coef.st.time.df<-cbind.data.frame('coef.st.time1.2'=coef.st.time.1.2,'coef.st.time.2'=coef.st.time.2,'coef.st.time.1'=coef.st.time.1, 'st'=substring(names(coef.st.time.1),3))
-cor(coef.st.time.df[,1:3])
-###############################################
-##############################################
-
-#calculate OD at ave max.deriv2.time for a temp.aernarobic/diagnosis combo
-ds.sub<-max.deriv2.time[max.deriv2.time$Diagnosis %in% c('0','5'),]
-ds.sub$Diagnosis<-factor(ds.sub$Diagnosis)
-spl.ds1<-split(ds.sub, list(ds.sub$anaerobic, ds.sub$temp, ds.sub$Diagnosis))
-ave.max.deriv2.time<-round(sapply(spl.ds1, function(x) median(x$max.deriv2.time,na.rm=TRUE)))+2 # Look 2 time periods (1 hour) AFTEr the start of log-growth
-labs1<-matrix(unlist(strsplit(names(ave.max.deriv2.time), '\\.')), ncol=3, byrow=T)
-ave.max.deriv2.time<-cbind.data.frame(ave.max.deriv2.time, labs1)
-names(ave.max.deriv2.time)<-c('ave.max.deriv2.time','anaerobic','temp','Diagnosis' )
-ds1<-merge(d1b, ave.max.deriv2.time, by=c('anaerobic', 'temp','Diagnosis'))
-od.fixed.time<-apply(ds1, 1, function(x) x[(8+as.numeric(x[length(x)] ))]) 
-od.fixed.time<-cbind.data.frame(ds1[,1:8], od.fixed.time=as.numeric(as.character((od.fixed.time))))
-hist(od.fixed.time$od.fixed.time)
-##Models
-mod.st.fixed.od<-lme(od.fixed.time  ~ st +  anaerobic*temp * Diagnosis ,  random = ~ 1|ID,
-                     data=od.fixed.time[od.fixed.time$anaerobic %in% c('1','2') 
-                                        & od.fixed.time$Diagnosis %in% c('0','5'),])
-coef.fe.mod.st.fixed.od<-fixef(mod.st.fixed.od)
-coef.st.fixed.od.1.2<-coef.fe.mod.st.fixed.od[substr(names(coef.fe.mod.st.fixed.od),1,2)=='st']
-
-mod.st.fixed.od<-lme(od.fixed.time  ~ st +  temp*Diagnosis ,  random = ~ 1|ID,
-                     data=od.fixed.time[od.fixed.time$anaerobic %in% c('1') 
-                                        & od.fixed.time$Diagnosis %in% c('0','5'),])
-coef.fe.mod.st.fixed.od<-fixef(mod.st.fixed.od)
-coef.st.fixed.od.1<-coef.fe.mod.st.fixed.od[substr(names(coef.fe.mod.st.fixed.od),1,2)=='st']
-
-mod.st.fixed.od<-lme(od.fixed.time  ~ st +  temp * Diagnosis ,  random = ~ 1|ID,
-                     data=od.fixed.time[od.fixed.time$anaerobic %in% c('2') 
-                                        & od.fixed.time$Diagnosis %in% c('0','5'),])
-coef.fe.mod.st.fixed.od<-fixef(mod.st.fixed.od)
-coef.st.fixed.od.2<-coef.fe.mod.st.fixed.od[substr(names(coef.fe.mod.st.fixed.od),1,2)=='st']
-coef.st.fixed.od.df<-cbind.data.frame('coef.st.fixed.od.1.2'=coef.st.fixed.od.1.2,'coef.st.fixed.od.1'=coef.st.fixed.od.1, 
-                                      'coef.st.fixed.od.2'=coef.st.fixed.od.2,'st'=substring(names(coef.st.fixed.od.2),3))
-cor(coef.st.fixed.od.df[,1:3])
 
 ##what isolates are tested under what conditions?
 # check1<-d1b[,c('ID', 'temp', 'anaerobic')]
