@@ -279,8 +279,6 @@ matplot(as.numeric(dimnames(mo1.c)[[1]]), mo1.c[,,'0','0'], type='l',bty='l', yl
 matplot(as.numeric(dimnames(mo1.c)[[1]]), mo1.c[,,'0','2'], type='l',bty='l', ylim=c(0,0.6), main='Carriage, aerobic with catalase', col=trans.black, lty=1)
 matplot(as.numeric(dimnames(mo1.c)[[1]]), mo1.c[,,'0','1'], type='l',bty='l', ylim=c(0,0.6), main='Carriage, Anaerobic', col=trans.black, lty=1)
 
-
-
 #d1b[d1b$ID=='H71',c(1:10)]
 #d1b[d1b$ID=='2011M8',c(1:10)] #carriage strain from Dutch collection, only tested at 33C
 
@@ -303,33 +301,44 @@ derivs2.all<-t(sapply(spl1, function(x) c(predict(x, deriv=2)$y, rep(NA, 48-leng
 max.deriv2.time<-apply(derivs2.all,1,function(x) which(x==max(x[1:24], na.rm=TRUE))[1] ) #capture peak that occures within first 12 h
 max.deriv2.time<-cbind.data.frame(d1a[,1:8],max.deriv2.time)
 
-par(mfrow=c(4,1))
+par(mfrow=c(4,1), mar=c(1,1,1,1))
 for(i in 1:20){
-  plot(log(Y.list[[i]]+0.01), type='l', bty='l')
-  title(i)
+  plot(log(Y.list[[i]]+0.01), type='l', bty='l', ylim=log(c(0.01, 0.5)))
+  title(paste("Observed",i))
   abline(v=max.deriv2.time$max.deriv2.time[i], lty=2, col='gray')
-  plot(fitted.all[i,], type='l', bty='l')
+  plot(fitted.all[i,], type='l', bty='l', ylim=log(c(0.01, 0.5)))
   abline(v=max.deriv2.time$max.deriv2.time[i], lty=2, col='gray')
+  title("Smoothed")
   plot(derivs.all[i,], type='l', bty='l')
   abline(v=max.deriv2.time$max.deriv2.time[i], lty=2, col='gray')
+  title("1st deriv")
   plot(derivs2.all[i,], type='l', bty='l')
   abline(v=max.deriv2.time$max.deriv2.time[i], lty=2, col='gray')
+  title('2nd deriv')
+  }
+#d1a[6, c(1:8)]  #H14
+par(mfrow=c(1,2), mar=c(1,2,1,1))
+for( i in 1:2){
+test1<-d1a[d1a$ID=='H14' & d1a$anaerobic %in% c(i),]
+temp.lab<-as.numeric(as.factor(as.numeric(as.character(test1$temp))))
+matplot(t(test1[, -c(1:8)]), type='l',col=ts.col[temp.lab], xlim=c(1,48),ylim=c(0,0.5), bty='l')
 }
+max.deriv<-apply(derivs.all,1,max, na.rm=T)
+
+d1c<-cbind.data.frame(d1a[,c('max.od','ID','st','anaerobic','temp', 'Diagnosis')],max.deriv, max.deriv2.time)
+d1c<
 
 
 #Compare max.d and length of lag phase and max.deriv
-max.deriv<-apply(derivs.all,1,max, na.rm=T)
 comp1.gro<-cbind.data.frame(d1a[,c('max.od','ID','st','anaerobic','temp', 'Diagnosis')],max.deriv, max.deriv2.time)
 cor(comp1.gro[,c('max.od','max.deriv','max.deriv2.time')])#growth rate correlated with max.od, not with lag length
 #plot(comp1.gro$max.deriv, comp1.gro$max.od)
 cor.test(comp1.gro[,c('max.od')],comp1.gro[,c('max.deriv')] )
 cor.test(comp1.gro[,c('max.deriv2.time')],comp1.gro[,c('max.deriv')] )
 cor.test(comp1.gro[,c('max.deriv2.time')],comp1.gro[,c('max.od')] )
-
-comp1.gro.ls<-split(comp1.gro, list(comp1.gro$anaerobic, comp1.gro$temp))
-corr.grp<-lapply(comp1.gro.ls, function(x) cor(x[,c('max.od','max.deriv','max.deriv2.time')] ))
-
-
+##Does correlation differ with environmental conditions?
+# comp1.gro.ls<-split(comp1.gro, list(comp1.gro$anaerobic, comp1.gro$temp))
+# corr.grp<-lapply(comp1.gro.ls, function(x) cor(x[,c('max.od','max.deriv','max.deriv2.time')] ))
 
 
 ###############################################
