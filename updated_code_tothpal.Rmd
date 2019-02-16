@@ -1,0 +1,1046 @@
+---
+title: "Updated analyses Tothpal et al"
+author: "Dan Weinberger"
+date: "January 24, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_knit$set(root.dir = 'C:/Users/dmw63/Desktop/My documents h/LAB/growth curve analyses/')
+knitr::opts_chunk$set(dev="png", 
+               dev.args=list(type="cairo"),
+               dpi=96)
+library(grofit)
+library(reshape)
+library(RColorBrewer)
+library(nlme)
+library(phia)
+library(data.table)
+require(caret)
+#setwd("C:\\Users\\dmw63\\Desktop\\My documents h\\LAB\\growth curve analyses\\")
+
+ts.col<- rev(brewer.pal(6,"RdYlBu")) #define color palette
+
+library(sjPlot)
+library(sjlabelled)
+library(sjmisc)
+library(ggplot2)
+theme_set(theme_sjplot())
+
+```
+
+### Import covariate data
+```{r, echo=FALSE}
+#import covariate data
+cov1<-read.csv('C:/Users/dmw63/Desktop/My documents h/OLD LIPSITCH LAB DATA/pneumo_master v2.csv')
+cov1$st<-as.character(cov1$ST)
+cov1$MASSCARR01[is.na(cov1$MASSCARR01)]<-0
+cov1$OSMANCARRN[is.na(cov1$OSMANCARRN)]<-0
+cov1$SLEEMANCARRN[is.na(cov1$SLEEMANCARRN)]<-0
+cov1$NORWAYCARR_PRE[is.na(cov1$NORWAYCARR_PRE)]<-0
+cov1$TROTTERCARRN[is.na(cov1$TROTTERCARRN)]<-0
+cov1$GREECECARRN[is.na(cov1$GREECECARRN)]<-0
+cov1$ave_carr_pre<-apply( cbind(cov1$MASSCARR01, cov1$OSMANCARRN, cov1$SLEEMANCARRN, cov1$NORWAYCARR_PRE, cov1$TROTTERCARRN,
+                                cov1$GREECECARRN), 1, mean, na.rm=TRUE )
+cov1$st[cov1$st=='6A/C']<-'6A'
+
+#Invasiveness data
+inv1<-read.csv('C:/Users/dmw63/Desktop/My documents h/INVASIVENESS/mcmc_invasive_single_stage.csv')
+inv1$st=as.character(inv1$st)
+inv1$st[inv1$st=='6A/C']<-'6A'
+
+#Ps composition data
+
+ps1<-read.csv('C:/Users/dmw63/Desktop/My documents h/LAB/pneumo metabolic genes/PS Composition_SS_final.csv')
+ps1$st<-as.character(ps1$Serotype)
+```
+Analysis for Tothpal et al.
+
+Code to analyze growth curve data from Tothpal et al. manuscript
+
+Key for Diagnosis vairable: 0- carriage, 1- pneumonia, 2- OM, AOM, 3- sinusitis, 4- conjuctivitis (1 strain ceratitis), 5- sepsis, 6-abscess
+
+Key for anaerobic variable: #Ambient air+Catalase is 2, oxyrase (anaerobic) = 1, ambient air (no catalase)=0
+
+
+```{r mlst_import}
+#ID for Israel strains doesn't match up with Israel strains tested in growth assays
+getwd()
+mlst1<-read.csv('./GrowthVariation/pcat_mlst_results.csv')
+mlst1<-mlst1[,c('sample_name','st_pcat1','MLST')]
+names(mlst1)<-c('ID','seq.st', 'mlst')
+mlst.count<-split(mlst1, mlst1$mlst)
+mlst.count<-sapply(mlst.count, function(x) nrow(x))
+mlst.count<-as.data.frame(mlst.count)
+mlst.count$mlst<- row.names(mlst.count)
+mlst1<-merge(mlst1,mlst.count, by='mlst')
+mlst1$ID<-as.character(mlst1$ID)
+cdc.strains<-substr(mlst1$ID,1,1) !="H" &substr(mlst1$ID,1,1) !="D"
+mlst1$ID[cdc.strains]<- paste0('CDC_',mlst1$ID[cdc.strains])
+```
+
+
+```{r growth_data_cleaning}
+d1a<- read.csv("master 5_24_2018.csv")
+d1a$ID<-as.character(d1a$ID)
+d1a$ID[d1a$Group=="CDC"]<-paste0('CDC','_',d1a$st[d1a$Group=="CDC"])
+d1a$st[which(d1a$st=="11")]<-"11A"
+d1a$st[which(d1a$st=="15")]<-"15B"
+d1a$st[which(d1a$st=="6B/D")]<-"6B"
+d1a$st[d1a$st=='5' &d1a$Diagnosis==5]<-"14"  #Our ST 5 strain from CDC is actually ST 14
+d1a$st=as.character(d1a$st)
+d1a$Diagnosis=as.numeric(d1a$Diagnosis)
+d1a$X<-NULL
+d1a$Age<-NULL
+d1a$Agegroup=NULL
+d1a$Ery<-NULL
+d1a$Pen<-NULL
+d1a$Pathogen<-NULL
+d1a$Pilus<-NULL
+d1a$Variant<-NULL
+d1a$ID<-as.factor(d1a$ID)
+d1a$Group<-NULL
+d1a$Diagnosis[substr(d1a$st,1,3)=="603"]<-7 #isogenic
+d1a$Diagnosis[substr(d1a$st,1,4)=="TIGR"]<-8 #isogenic
+d1a$Diagnosis[d1a$st=="15B-" | d1a$st=='10A-']<-9 #cps- knockout
+d1a<-d1a[substr(d1a$st,1,1) != "P",]
+d1a<-d1a[d1a$st != "SAUR",]
+d1a<-d1a[d1a$st != "Morax",]
+d1a<-d1a[d1a$st != "Blank",]
+d1a<-d1a[d1a$st != "",]
+d1a$st[d1a$st %in% c("15B", "15C", '15B/C')] <-"15BC"
+d1a<-d1a[d1a$temp>=30 & d1a$temp<=39,] #Restrict analysis to 30-39C (higher and lower temps not reliable)
+d1a<-d1a[d1a$st !="unknown",]
+d1a<-d1a[d1a$st !="GBS",]
+d1a<-d1a[which(!is.na(d1a$Diagnosis)),]
+d1a$ID<-as.character(d1a$ID)
+d1a<-merge(mlst1,d1a, by='ID', all=TRUE)
+
+#Check for replicates of MLST
+st.mlst.combo<-unique(d1a[,c( 'st','seq.st', 'mlst')])
+st.mlst.combo<-st.mlst.combo[order(st.mlst.combo$mlst),]
+st.mlst.combo$concordance<-as.character(st.mlst.combo$st)==as.character(st.mlst.combo$seq.st)
+#mean(st.mlst.combo$concordance, na.rm=T)
+
+ID2<-paste(d1a$st,d1a$Diagnosis,sep="_")
+d1a<-cbind.data.frame(ID2, d1a)
+d1a$ID<-as.character(d1a$ID)
+d1a$ID[d1a$ID==""]<-as.character(d1a$ID2[d1a$ID==""])
+
+d1a<- d1a[which(!is.na(d1a$X1)),] #removes MLSTs that don't have matching growth data
+
+## blank based on t=0
+d1a$X1[d1a$X1>d1a$X2]<- d1a$X2[d1a$X1>d1a$X2]
+d1a[,10:ncol(d1a)]<-d1a[,10:ncol(d1a)] - (d1a$X1) #
+d1a[,10:ncol(d1a)][d1a[,10:ncol(d1a)]<0]<-0  #Values must be >=0
+
+#Fix coding for isogenic strains
+d1a$st[d1a$st=="NT"]<-"cps-"
+d1a$st[d1a$st=="TIGR4 Janus"]<-"cps-"
+d1a$st[d1a$st=="603 Janus"]<-"cps-"
+d1a$st[d1a$st=="603"]<-"6B"
+d1a$st[d1a$st=="TIGR4"]<-"4"
+d1a$st[d1a$st=="TIGR5"]<-"5"
+d1a$st[d1a$st=="TIGR14"]<-"14"
+d1a$st[d1a$st=="TIGR19F"]<-"19F"
+d1a$st[d1a$st=="R6"]<-"cps-"
+
+#identify which STs have isolates for both carriage AND IPD??
+st.dx.table<- as.data.frame.matrix(table(d1a$st, d1a$Diagnosis))
+st.keep.dx<- row.names(st.dx.table)[st.dx.table$'5'!=0 & st.dx.table$'0'!=0] 
+
+#tabulate # replicates for each condition
+d1.tab<-d1a[,c('ID','st','anaerobic','Diagnosis','temp' )]
+tab1<-setDT(d1.tab)[,list(Count=.N) ,names(d1.tab)]
+
+####Generate average curves for use in plotting (average over replictes of same isolate)
+d1a.agg<-d1a
+d1a.agg$max.od<-NULL
+d1_agg2<-aggregate(d1a.agg[,-c(1:9)], list(d1a.agg$ID2,d1a.agg$st, d1a.agg$anaerobic, d1a.agg$temp, d1a.agg$ID,d1a.agg$Diagnosis), mean, na.rm=TRUE)
+names(d1_agg2)[1:6]<-c('ID2','st','anaerobic', 'temp','ID','Diagnosis')
+
+```
+
+## Plots of all growth curves
+```{r fig1, echo=FALSE,fig.width=8, fig.height=2}
+#tiff('all.ts1.tiff',width=11, height=4.3, units='in', res=400)
+par(mfrow=c(1,3), mar=c(2,5,1,1))
+trans.black<-rgb(0,0,0,alpha=0.1)
+matplot(c(1:48)/2, t(d1a[d1a$anaerobic=='0',11:58]),xlab="Time (hours)", main='Aerobic',ylab='Density (OD600)', type='l',lty=1, bty='l', col=trans.black)
+matplot(c(1:48)/2,t(d1a[d1a$anaerobic=='2',11:58]),xlab="Time (hours)",main="Aerobic+Catalase",ylab='Density (OD600)', type='l',lty=1, bty='l', col=trans.black)
+matplot(c(1:48)/2,t(d1a[d1a$anaerobic=='1',11:58]),xlab="Time (hours)",main='Anaerobic',ylab='Density (OD600)', type='l',lty=1, bty='l', col=trans.black)
+#dev.off()
+```
+
+##plot subsets of curves
+```{r curve_subset_plot,fig.width=8, fig.height=3}
+####CHANGE OPTIONS HERE FOR PLOT SELECTION
+st.select<-'8'  #Which serotype do you want to plot?
+#id.select.19F<-c('H133','H12','CDC_19F','H111') #H111 is a pneumonia isolate, H133 is conjuncitivitis; 
+####
+sub1<-par(mfrow=c(1,1))
+#names(d1_agg2)[1]<-'temp.lab'
+d1a.agg$anaerobic<-as.numeric(as.character(d1a.agg$anaerobic))
+d1a.agg$temp<-as.numeric(as.character(d1a.agg$temp))
+d1a.agg$st<-as.character(d1a.agg$st)
+#tiff('plot1.tiff',width=11, height=5.3, units='in', res=400)
+# par(mfcol=c(3,4),mar=c(2,3,1,1))
+par(mfrow=c(1,3),mar=c(2,3,1,1))
+# for(dx.select in c(0,4,1,5)){ #Body sites
+for(dx.select in c(5)){ #Body sites
+  for(ana.select in c(0,2,1)){  #Catalase, anaerobic, aertobic
+    id.composite<-paste0(d1a.agg$ID,d1a.agg$st,d1a.agg$temp,d1a.agg$anaerobic)
+    d1.df<-d1a.agg[d1a.agg$st==st.select & duplicated(id.composite)==FALSE & d1a.agg$anaerobic %in% c(ana.select) & d1a.agg$Diagnosis %in% c(dx.select) , ]
+    d1.df<-d1.df[ order(-d1.df$anaerobic, -d1.df$temp, d1.df$st), ]
+    hm.df<-(as.matrix(d1.df[ , 10:52]))
+    max.ts.time<-apply(t(hm.df),2,which.max)/2 -0.5 #time at which max is achieved for each TS
+    max.ts.od<-apply(t(hm.df),2,max, na.rm=TRUE) #OD at  max  for each TS
+    temp.lab<-as.numeric(as.factor(d1.df$temp))
+    matplot(seq(from=0, to=(nrow(t(hm.df))-1)/2, by=0.5),t(hm.df),lwd=2,  type="l",lty=1,yaxt='n', col=ts.col[temp.lab],xlab="Time (h)",bty="n", ylab="OD",ylim=c(0,0.5) )
+    if(dx.select=='0'){axis(side=2 ,at=c(0,0.1,0.2,0.3,0.4,0.5))    } #if yaxt='n'
+    text(max.ts.time, max.ts.od+0.02, d1.df$temp, col=ts.col[temp.lab], cex=0.75 )
+  }
+}
+#dev.off()
+```
+
+```{r max.calculations }
+##Calculate max OD600 and time to mid point OD600
+d1a$anaerobic<- relevel(as.factor(d1a$anaerobic), ref = '1')
+d1a$st<- relevel(as.factor(d1a$st), ref = '14') 
+d1a$temp<- relevel(as.factor(d1a$temp), ref = '33') #reference
+d1a$Diagnosis<- relevel(as.factor(d1a$Diagnosis), ref = '5') #Sepsis as reference
+max.od<-apply(d1a[,-c(1:9)],1,max, na.rm=TRUE)
+# ts<-d1a[,-c(1:9)] #times series only
+# t.past.mid.log<- ts >= max.od/2 #is OD past mid point?
+# t.past.mid.log.cumsum<-apply(t.past.mid.log,1,cumsum)
+# t.past.mid.log.cumsum2<-apply(t.past.mid.log.cumsum,2,cumsum) #if multiple with value of 1, take first
+# t.midpoint<-unlist(apply(t.past.mid.log.cumsum2,2,function(x) which(x==1)/2))
+d1a<-cbind.data.frame(max.od,d1a)
+d1a<-d1a[d1a$max.od>=0.05,]    #FILTER OUT IF MAX OD <0.05
+```
+
+### Calculate Max density, derivatives
+Format data for regression
+```{r deriv.calc1}
+d1b<-d1a[d1a$Diagnosis %in% c('0', '1','2','3','4','5','6'),]
+d1b$Diagnosis<-factor(d1b$Diagnosis)
+d1b$st<-factor(d1b$st)
+d1b$temp<-factor(d1b$temp)
+d1b$anaerobic<-factor(d1b$anaerobic)
+
+###SPLINE ANALYSIS TO GET DERIVATIVES Use smooth.spline function, which is same thing they do in the grofit package; use a fixed smoothing parameter for simplicity
+#library(fdapace)
+Y.list<- split(d1b[,-c(1:10, (48+10+1):ncol(d1b))], as.factor(1:nrow(d1b)))
+d1.data<-d1b[,-c(1:10, (48+10+1):ncol(d1b))]
+Y.list<-lapply(Y.list, function(x) as.numeric(x[1,])) #List of OD600 values
+T.list<-lapply(Y.list, function(x) (1:length(x))/2 ) #List of times (h)
+
+#How much to add for continuity correction? could find minumum value>0 for each curve and divde by 2
+half.min.curve<-sapply(Y.list, function(x) min(x[x>0], na.rm=T))*1 #set at the minimum value
+smooth.func<-function(x, cont.correct){
+  smooth.mod<-smooth.spline(log(x[!is.na(x)]+cont.correct), spar=0.5)
+  return(smooth.mod)
+}
+
+spl1<-mapply(smooth.func, x=Y.list, cont.correct=half.min.curve, SIMPLIFY=FALSE) #smooth the log-growth curve--gives mch more reliable results than smothing raw OD
+  #Spar determined empircally by trying values between 0.2 and 0.9  to find one that was adquate for many curves (ie eyeballing where the estimated
+  #start to log-grwth was vs the calculated time when 2nd derivative was at maximum. cross-validation
+  #gave unstable 
+fitted.all<-t(sapply(spl1, function(x) c(predict(x)$y, rep(NA, 48-length(predict(x)$y ))  )))
+derivs.all<-t(sapply(spl1, function(x) c(predict(x, deriv=1)$y, rep(NA, 48-length(predict(x)$y ))  )))
+derivs2.all<-t(sapply(spl1, function(x) c(predict(x, deriv=2)$y, rep(NA, 48-length(predict(x)$y ))  )))
+
+#When is 2nd deriv at max? ie start of log phase
+max.deriv2.time<-apply(derivs2.all,1,function(x) which(x==max(x[1:24], na.rm=TRUE))[1] ) #capture peak that occures within first 12 h
+max.deriv2.time<-cbind.data.frame(d1b[,1:10],max.deriv2.time)
+
+max.deriv<-apply(derivs.all,1,max, na.rm=T)
+
+
+d1c<-cbind.data.frame(d1b[,c('max.od','ID','st','anaerobic','temp', 'Diagnosis')],max.deriv, "max.deriv2.time"=max.deriv2.time[,c('max.deriv2.time')])
+d1d<-d1c[d1c$anaerobic %in% c('1','2'),]
+d1d$anaerobic<-factor(d1d$anaerobic)
+
+#calculate OD at ave max.deriv2.time for a temp.aernarobic/diagnosis combo
+ds.sub<-max.deriv2.time
+ds.sub$Diagnosis<-factor(ds.sub$Diagnosis)
+spl.ds1<-split(ds.sub, list(ds.sub$anaerobic, ds.sub$temp, ds.sub$Diagnosis))
+ave.max.deriv2.time<-round(sapply(spl.ds1, function(x) median(x$max.deriv2.time,na.rm=TRUE)))+2 # Look 2 time periods (1 hour) AFTEr the start of log-growth
+labs1<-matrix(unlist(strsplit(names(ave.max.deriv2.time), '\\.')), ncol=3, byrow=T)
+ave.max.deriv2.time<-cbind.data.frame(ave.max.deriv2.time, labs1)
+names(ave.max.deriv2.time)<-c('ave.max.deriv2.time','anaerobic','temp','Diagnosis' )
+ds1<-merge(d1b, ave.max.deriv2.time, by=c('anaerobic', 'temp','Diagnosis'))
+od.fixed.time<-apply(ds1, 1, function(x) x[(10+as.numeric(x[length(x)] ))]) 
+od.fixed.time<-cbind.data.frame(ds1, od.fixed.time=as.numeric(as.character((od.fixed.time))))
+
+```
+
+Explore patterns in max.deriv2.time--this clearly shows that lag length (time of max deriv2) is longer at higher temperatures for the same strain
+```{r, fig.width=10}
+
+library(reshape2)
+deriv2.prep<-max.deriv2.time[,c('temp','anaerobic','ID','max.deriv2.time')]
+deriv2.m<-melt(deriv2.prep, id.vars = c('temp','anaerobic','ID'))
+deriv2.c<-acast(deriv2.m, temp~anaerobic~ID, fun.aggregate=mean, na.rm=T)
+
+deriv2.c<-deriv2.c[order(as.numeric(dimnames(deriv2.c)[[1]]) ),,] #
+#matplot( as.numeric(dimnames(deriv2.c)[[1]]), deriv2.c[,'1',], type='l', col='gray', bty='l')
+#matplot( as.numeric(dimnames(deriv2.c)[[1]]), deriv2.c[,'2',], type='l', col='gray', bty='l')
+
+#Adjust all to use 33C as the reference
+deriv2.d<-deriv2.c
+for(i in 1:6){
+deriv2.d[i,,]<-deriv2.d[i,,] - deriv2.d[2,,] #Subtract the lag length at 33C from the lag length at other temps.
+}
+par(mfrow=c(1,3))
+matplot( as.numeric(dimnames(deriv2.d)[[1]]), deriv2.d[,'1',]/2, type='l', col='gray', bty='l',ylab='Time difference(hours)', xlab='Temp')
+matplot( as.numeric(dimnames(deriv2.d)[[1]]), deriv2.d[,'2',]/2, type='l', col='gray', bty='l',ylab='Time difference(hours)', xlab='Temp')
+matplot( as.numeric(dimnames(deriv2.d)[[1]]), deriv2.d[,'0',]/2, type='l', col='gray', bty='l',ylab='Time difference(hours)', xlab='Temp')
+
+```
+
+## Plot observed, smoothed, and derivatives
+The vertial line denotes where the max second derivative is estimated to occur. This is used as the end of lag phase
+```{r deriv.plot1,fig.width=4, fig.height=4}
+plot.index<-which(d1b$anaerobic=='2' & d1b$st=='8' &d1b$Diagnosis=='5')
+
+#d1b[plot.index, 1:9]
+par(mfrow=c(4,1), mar=c(1,1,1,1))
+for(i in plot.index){
+  plot(log(Y.list[[i]]+half.min.curve[i]), type='l', bty='l', ylim=log(c(0.001, 0.5)))
+  title(paste("Observed ",'St8 ',d1b$temp[i]))
+  abline(v=max.deriv2.time$max.deriv2.time[i], lty=2, col='gray')
+  plot(fitted.all[i,], type='l', bty='l', ylim=log(c(half.min.curve[i], 0.5)))
+  abline(v=max.deriv2.time$max.deriv2.time[i], lty=2, col='gray')
+  title("Smoothed")
+  plot(derivs.all[i,], type='l', bty='l')
+  abline(v=max.deriv2.time$max.deriv2.time[i], lty=2, col='gray')
+  title("1st deriv")
+  plot(derivs2.all[i,], type='l', bty='l')
+  abline(v=max.deriv2.time$max.deriv2.time[i], lty=2, col='gray')
+  title('2nd deriv')
+  }
+```
+
+## Evaluate associations among growth characteristics
+```{r growth.corr}
+#Compare max.d and length of lag phase and max.deriv
+comp1.gro<-cbind.data.frame(d1b[,c('max.od','ID','st','anaerobic','temp', 'Diagnosis')],max.deriv, max.deriv2.time )
+comp1.gro<-comp1.gro[comp1.gro$anaerobic %in% c('1','2'),]
+cor(comp1.gro[,c('max.od','max.deriv','max.deriv2.time')])#growth rate correlated with max.od, not with lag length
+#plot(comp1.gro$max.deriv, comp1.gro$max.od)
+cor.test(comp1.gro[,c('max.od')],comp1.gro[,c('max.deriv')] )
+cor.test(comp1.gro[,c('max.deriv2.time')],comp1.gro[,c('max.deriv')] )
+cor.test(comp1.gro[,c('max.deriv2.time')],comp1.gro[,c('max.od')] )
+##Does correlation differ with environmental conditions?
+# comp1.gro.ls<-split(comp1.gro, list(comp1.gro$anaerobic, comp1.gro$temp))
+# corr.grp<-lapply(comp1.gro.ls, function(x) cor(x[,c('max.od','max.deriv','max.deriv2.time')] ))
+
+```
+
+## Models of associations between growth characteristics and other variables
+max density vs temp
+```{r}
+#Function to extract coefficients
+coef.func<-function(mod.name, covar.name,covar.label, ref.level, ylabs){
+    fixef1<-intervals(mod.name)$fixed
+    coef1<-as.data.frame(fixef1[grep(covar.name,dimnames(fixef1)[[1]]),,drop=FALSE])
+    covar<- as.numeric(unlist(regmatches(dimnames(coef1)[[1]], gregexpr("[[:digit:]]+", dimnames(coef1)[[1]]))))
+    coef1[,covar.name]<-covar
+    coef1<-rbind.data.frame(coef1, c(0,0,0,ref.level) )
+      plot(coef1[,covar.name],coef1[,'est.'], ylim=c(min(coef1[,1:3]), max(coef1[,1:3])), ylab=ylabs, xlab=covar.label, bty='l', pch=16, col='black')
+    arrows(coef1[,covar.name], coef1[,'lower'], coef1[,covar.name],coef1[,'upper'], length=0)
+    plot1<-recordPlot()
+       return(plot1)
+}
+```
+
+```{r growth_reg1, fig.show='asis',fig.width=4, fig.height=4}
+
+
+#Test association between environment and max.od, max.deriv2.time,max.deriv
+mod1<-lme(max.od  ~ st +  anaerobic+ temp + Diagnosis ,  random = ~ 1|ID,data=d1d)
+#Plot temp plot
+temp.coef1<-coef.func(mod.name=mod1,covar.name='temp', ref.level=33, covar.label='Temperature',ylabs="Difference in OD600" )
+#o2.coef1<-coef.func(mod.name=mod1,covar.name='anaerobic', ref.level=1, covar.label='Anaerobic', ylabs="Difference in OD600" )
+#o2.coef1
+#temp.coef1
+```
+
+## Derivative vs temp 
+
+```{r growth_reg2, fig.show='asis',fig.width=4, fig.height=4}
+#Growth rate
+mod2<-lme(max.deriv  ~ st +  anaerobic+ temp + Diagnosis ,  random = ~ 1|ID,data=d1d)
+fixef2<-summary(mod2)$tTable
+temp.coef2<-coef.func(mod.name=mod2,covar.name='temp', ref.level=33, covar.label='Temperature',ylabs="Difference in Growth Rate" )
+#o2.coef2<-coef.func(mod.name=mod2,covar.name='anaerobic', ref.level=1, covar.label='Anaerobic' ,ylabs="Difference in Growth Rate")
+#o2.coef2
+#temp.coef2
+
+```
+
+## Length of Lag phase vs temp
+
+```{r growth_reg3, fig.show='asis',fig.width=4, fig.height=4}
+#Lag phase
+mod3<-lme(max.deriv2.time  ~  st +  anaerobic+ temp + Diagnosis  ,  random = ~ 1|ID,data=d1d)
+fixef3<-summary(mod3)$tTable
+temp.coef3<-coef.func(mod.name=mod3,covar.name='temp', ref.level=33, covar.label='Temperature' ,ylabs="Difference in lag phase")
+
+#o2.coef3<-coef.func(mod.name=mod3,covar.name='anaerobic', ref.level=1, covar.label='Anaerobic' ,ylabs="Difference in lag phase")
+#o2.coef3
+#temp.coef3
+
+
+
+```
+
+## Does the effect of temp on lag phase differ for  carriage nd IPD isolates?
+```{r growth_reg3a, fig.show='asis',fig.width=8, fig.height=4}
+#Lag phase
+par(mfrow=c(1,2))
+mod3<-lme(max.deriv2.time  ~   anaerobic+ temp  ,  random = ~ 1|ID,data=d1d[d1d$Diagnosis=='5',])
+temp.coef3<-coef.func(mod.name=mod3,covar.name='temp', ref.level=33, covar.label='Temperature' ,ylabs="Difference in lag phase")
+title('IPD isolates')
+mod3<-lme(max.deriv2.time  ~   anaerobic+ temp  ,  random = ~ 1|ID,data=d1d[d1d$Diagnosis=='0',])
+temp.coef3<-coef.func(mod.name=mod3,covar.name='temp', ref.level=33, covar.label='Temperature' ,ylabs="Difference in lag phase")
+title('Carriage isolates')
+
+
+
+``` 
+
+```{r}
+#Function to extract st coefficients
+st.coef.func<-function(mod.name, covar.name='st',covar.label, ref.level, ylabs){
+    fixef1<-intervals(mod.name)$fixed
+    coef1<-as.data.frame(fixef1[grep(covar.name,dimnames(fixef1)[[1]]),,drop=FALSE])
+    covar<- gsub('st','',row.names(coef1))
+    coef1[,covar.name]<-covar
+    ref<-cbind.data.frame( 'lower'=0,'est.'=0,'upper'=0,'st'=as.character(ref.level ))
+    coef1<-rbind.data.frame(coef1, ref )
+    coef1$order<- rank(coef1$est.)
+      plot(coef1$order,coef1[,'est.'], ylim=c(min(coef1[,1:3]), max(coef1[,1:3])), ylab=ylabs, xlab=covar.label, bty='l', pch=16, col='black',xaxt='n')
+    arrows(coef1$order, coef1[,'lower'], coef1$order,coef1[,'upper'], length=0)
+    axis(side=1, at=coef1$order , labels=coef1$st ,las=2)
+    plot1<-recordPlot()
+       return(plot1)
+}
+```
+
+## Calculate serotype effect on growth after controlling for environmental variability
+```{r st.effect, fig.width=10}
+#Max OD
+mod.st<-lme(max.od  ~ st +  anaerobic*temp + Diagnosis*anaerobic ,  random = ~ 1|ID,data=d1d)
+coef.fe.mod.st<-fixef(mod.st)
+coef.st1.2<-coef.fe.mod.st[substr(names(coef.fe.mod.st),1,2)=='st']
+st.coef.func(mod.st, covar.label='Serotype',ref.level='14', ylabs='Difference in Max OD600')
+abline(h=0, col='gray', lty=2)
+
+
+mod.st<-lme(max.od  ~ st +  temp + Diagnosis ,  random = ~ 1|ID,data=d1d[d1d$anaerobic=='1',])
+coef.fe.mod.st<-fixef(mod.st)
+coef.st1<-coef.fe.mod.st[substr(names(coef.fe.mod.st),1,2)=='st' ]
+
+mod.st<-lme(max.od  ~ st +  temp + Diagnosis ,  random = ~ 1|ID,data=d1d[d1d$anaerobic=='2',])
+coef.fe.mod.st<-fixef(mod.st)
+coef.st2<-coef.fe.mod.st[substr(names(coef.fe.mod.st),1,2)=='st' ]
+
+#Time to start of lag growth (max deriv 2)
+lag.length.mod<-lme(max.deriv2.time  ~ st +anaerobic*temp+anaerobic*Diagnosis  ,  random = ~ 1|ID,                    data=d1d)
+coef.fe.lag.length.st<-fixef(lag.length.mod)
+coef.lag.length.1.2<-coef.fe.lag.length.st[substr(names(coef.fe.lag.length.st),1,2)=='st']
+st.coef.func(lag.length.mod, covar.label='Serotype',ref.level='14', ylabs='Difference in Lag length')
+abline(h=0, col='gray', lty=2)
+
+#Max growth rate
+#Time to start of lag growth (max deriv 2)
+growth.rate.mod<-lme(max.deriv  ~ st +anaerobic*temp + anaerobic*Diagnosis  ,  random = ~ 1|ID,
+                    data=d1d)
+coef.fe.growth.rate.st<-fixef(growth.rate.mod)
+coef.growth.rate.1.2<-coef.fe.growth.rate.st[substr(names(coef.fe.growth.rate.st),1,2)=='st']
+st.coef.func(growth.rate.mod, covar.label='Serotype',ref.level='14', ylabs='Difference in growth rate')
+abline(h=0, col='gray', lty=2)
+
+
+growth.rate.mod<-lme(max.deriv  ~ st +temp + Diagnosis  ,  random = ~ 1|ID,
+                    data=d1d[d1d$anaerobic==1,])
+coef.fe.growth.rate.st<-fixef(growth.rate.mod)
+coef.growth.rate.1<-coef.fe.growth.rate.st[substr(names(coef.fe.growth.rate.st),1,2)=='st']
+
+
+growth.rate.mod<-lme(max.deriv  ~ st +temp + Diagnosis  ,  random = ~ 1|ID,
+                    data=d1d[d1d$anaerobic==2,])
+coef.fe.growth.rate.st<-fixef(growth.rate.mod)
+coef.growth.rate.2<-coef.fe.growth.rate.st[substr(names(coef.fe.growth.rate.st),1,2)=='st']
+
+
+#OD at early, fixed timepoint
+mod.st.fixed.od<-lme(od.fixed.time  ~ st +  anaerobic*temp + anaerobic*Diagnosis ,  random = ~ 1|ID,
+                     data=od.fixed.time)
+coef.fe.mod.st.fixed.od<-fixef(mod.st.fixed.od)
+coef.st.fixed.od.1.2<-coef.fe.mod.st.fixed.od[substr(names(coef.fe.mod.st.fixed.od),1,2)=='st']
+st.coef.func(mod.st.fixed.od, covar.label='Serotype',ref.level='14', ylabs='Difference in early OD')
+abline(h=0, col='gray', lty=2)
+
+
+#There are many more observations for anaerobic, but mostly same isolates tested with more replicates
+table(od.fixed.time[od.fixed.time$anaerobic==2,'Diagnosis'])
+table(od.fixed.time[od.fixed.time$anaerobic==1,'Diagnosis'])
+
+#As break down by temp, it becomes fewer isolates
+length(unique(od.fixed.time[od.fixed.time$anaerobic==1,'ID']))
+length(unique(od.fixed.time[od.fixed.time$anaerobic==2,'ID']))
+length(unique(od.fixed.time[od.fixed.time$anaerobic==1& od.fixed.time$temp=='33','ID']))
+length(unique(od.fixed.time[od.fixed.time$anaerobic==2& od.fixed.time$temp=='33','ID']))
+
+mod.st.fixed.od<-lme(od.fixed.time  ~ st +  temp + Diagnosis ,  random = ~ 1|ID,
+                     data=od.fixed.time[od.fixed.time$anaerobic==1,])
+coef.fe.mod.st.fixed.od<-fixef(mod.st.fixed.od)
+coef.st.fixed.od.1<-coef.fe.mod.st.fixed.od[substr(names(coef.fe.mod.st.fixed.od),1,2)=='st']
+
+mod.st.fixed.od2<-lme(od.fixed.time  ~ st +  temp + Diagnosis ,  random = ~ 1|ID,
+                     data=od.fixed.time[od.fixed.time$anaerobic==2,])
+coef.fe.mod.st.fixed.od<-fixef(mod.st.fixed.od2)
+coef.st.fixed.od.2<-coef.fe.mod.st.fixed.od[substr(names(coef.fe.mod.st.fixed.od),1,2)=='st']
+st.coef.func(mod.st.fixed.od2, covar.label='Serotype',ref.level='14', ylabs='Difference in early OD')
+abline(h=0, col='gray', lty=2)
+
+
+coef.st.regs<-cbind.data.frame('coef.st.fixed.od.1.2'=coef.st.fixed.od.1.2,
+                               'coef.st.fixed.od.1'=coef.st.fixed.od.1,
+                               'coef.st.fixed.od.2'=coef.st.fixed.od.2,
+                                  'coef.st.max.od.1.2'=coef.st1.2,
+                                  'coef.st.max.od.1'=coef.st1,
+                                  'coef.st.max.od.2'=coef.st2,
+                                  'coef.st.lag.length.1.2'=coef.lag.length.1.2,
+                                  'coef.growth.rate.1.2'=coef.growth.rate.1.2,
+                                  'coef.growth.rate.1'=coef.growth.rate.1,
+                                  'coef.growth.rate.2'=coef.growth.rate.2,
+                                      'st'=substring(names(coef.st.fixed.od.1.2),3))
+
+coef.st.regs.plot<-coef.st.regs
+coef.st.regs.plot$coef.st.lag.length.1.2<- -1*coef.st.regs.plot$coef.st.lag.length.1.2 #flip direction
+#cividis color pallete http://journals.plos.org/plosone/article?id=10.1371/journal.pone.0199239#sec011
+civ1<-read.csv('C:/Users/dmw63/Desktop/My documents h/color palettes/cividis rgb.csv')
+civ1.pal<-rgb(civ1[,1], civ1[,2], civ1[,3])
+color.pick<-sort(sample(length(civ1.pal), nrow(coef.st.regs.plot)))
+civ1.pal2<-civ1.pal[color.pick]
+#my_palette <- colorRampPalette(c("red", "yellow", "green"))(n = nrow(coef.st.regs.plot))
+heatmap(as.matrix(coef.st.regs.plot[,c("coef.st.lag.length.1.2","coef.st.fixed.od.1.2","coef.st.max.od.1.2","coef.growth.rate.1.2")]), scale='column', col=civ1.pal2)
+
+
+##Coefficients for Maile
+#MERGE together all coefficients
+maile.coef1<-coef.st.regs.plot
+maile.coef1$st<-row.names(maile.coef1)
+  write.csv(maile.coef1, 'coef.st.regs.plot.csv')
+
+```
+
+## How does serotype effect on max OD vary by oxygen? 
+```{r st.oxygen.interact, fig.width=10.6, fig.height=5.3}
+sub<-d1d
+col.ana2<-c('#1b9e77','#7570b3')
+pch.ana2=c(15,16,17)
+sub$st<-factor(sub$st)
+sub$anaerobic<-factor(sub$anaerobic)
+sub$Diagnosis<-factor(sub$Diagnosis)
+mod4<-lme(max.od  ~ st + anaerobic +Diagnosis+ temp +st*anaerobic,  random = ~ 1|ID,data=sub)
+#summary(mod4)
+test4<- interactionMeans(mod4, factors=c('anaerobic','st'))
+test4$st.num<-as.numeric(test4$st)
+test4$lcl<-test4$`adjusted mean` -1.96*test4$`std. error`
+test4$ucl<-test4$`adjusted mean` +1.96*test4$`std. error`
+test4.plot<-test4
+
+par(mfrow=c(1,1))
+plot(test4.plot$st.num, test4.plot$`adjusted mean`, col=col.ana2[test4.plot$anaerobic],bty='l', pch=pch.ana2[test4.plot$anaerobic])
+arrows(test4.plot$st.num,test4.plot$lcl,test4.plot$st.num,test4.plot$ucl, code=3, angle=90, length=0.0,  col=col.ana2[test4.plot$anaerobic])
+text(test4.plot$st.num[test4.plot$anaerobic==2], test4.plot$`adjusted 
+     mean`[test4.plot$anaerobic==2]*1.2, test4.plot$st[test4.plot$anaerobic==2]) 
+
+coefs<-t(coef(mod4)[1,])
+keep.index.coef<-which(row.names(coefs)=='st1:anaerobic2'):length(coefs)
+coef.lab<-dimnames(coefs)[[1]][keep.index.coef]
+coefs.ana.interact<-cbind.data.frame(coef.lab,coefs[keep.index.coef])
+coefs.ana.interact[,2]<-coefs.ana.interact[,2]-min(coefs.ana.interact[,2])
+names(coefs.ana.interact)<-c('st','coef.ana.st')
+coefs.ana.interact<-coefs.ana.interact[order(coefs.ana.interact$coef.ana.st),]
+coefs.ana.interact$st<-gsub( ":.*$", "", coefs.ana.interact$st ) #exclude text after colon
+coefs.ana.interact$st<-substr(coefs.ana.interact$st,3,nchar(coefs.ana.interact$st)) #remove "st" from the variable
+#plot(1:nrow(coefs.ana.interact), coefs.ana.interact$coef.ana.st, bty='l')
+#text(1:nrow(coefs.ana.interact), coefs.ana.interact$coef.ana.st+0.01,coefs.ana.interact$st )
+
+#Plot to show effect of O2 by serotype
+cis.mod4<-as.data.frame(intervals(mod4)[[1]])
+keep.index.coef<-which(row.names(cis.mod4)=='st1:anaerobic2'):nrow(cis.mod4)
+cis.mod4.int<-cis.mod4[keep.index.coef,]
+cis.mod4.ref<-as.data.frame(t(c(0,0,0))) #add bak in ref serotype
+names(cis.mod4.ref)<-names(cis.mod4.int)
+cis.mod4.ref$st<-'14'
+cis.mod4.int$st<-gsub( ":.*$", "", row.names(cis.mod4.int) ) #exclude text after colon
+cis.mod4.int$st<-substr(cis.mod4.int$st,3,nchar(cis.mod4.int$st)) #remove "st" from the variable
+cis.mod4.int<-rbind.data.frame(cis.mod4.ref,cis.mod4.int)
+remove<-c("43/45/48","6B/D",'9',"25FA/38",'5' ) #our ST5 in CDC collection not actually ST5
+cis.mod4.int<-cis.mod4.int[!cis.mod4.int$st %in% remove,]
+cis.mod4.int<-cis.mod4.int[order(cis.mod4.int$est.),]
+cis.mod4.int$st.num<-1:nrow(cis.mod4.int)
+cis.mod4.int[,1:3]<-cis.mod4.int[,1:3] - min(cis.mod4.int[,2]) #subtract to center on 0
+#tiff('fig 4 st o2 effect.tiff',width=10.6, height=5.3, units='in', res=400)
+plot(cis.mod4.int$st.num,cis.mod4.int[,'est.'], bty='l', ylim=c(-0.02,0.18), pch=16, xaxt='n',xlab='',
+     ylab="Max density aerobic (with catalase) - anaerobic")
+arrows(cis.mod4.int$st.num,cis.mod4.int$lower,cis.mod4.int$st.num,cis.mod4.int$upper, code=3, angle=90, length=0.0,  col='gray')
+text(cis.mod4.int$st.num,cis.mod4.int[,2]+0.01,cis.mod4.int$st ,srt=90)
+#dev.off()
+
+```
+
+## Two step approach to quantify serotype/strain effect
+
+```{r st.effect.od2, fig.width=8, fig.height=4.5}
+#Max OD ...note can't have Dx*temp interaction bc it won't converge
+mod.st2<-lme(max.od  ~   anaerobic*temp + Diagnosis*anaerobic ,  random = ~ 1|ID,data=d1d)
+strain.effect.max.od<-ranef(mod.st2)
+strain.effect.max.od$ID<-row.names(strain.effect.max.od)
+strain.chars<-unique(d1d[,c('ID', 'st')])
+strain.effect.max.od<-merge(strain.effect.max.od, strain.chars, by='ID' , all=TRUE)
+#Want to sort by median RE for the ST
+strain.effect.max.od.spl<-split(strain.effect.max.od, strain.effect.max.od$st)
+strain.effect.max.od.median<-as.data.frame(sapply(strain.effect.max.od.spl, function(x) median(x$'(Intercept)') ))
+names(strain.effect.max.od.median)<-'st.median'
+strain.effect.max.od.median$st<-dimnames(strain.effect.max.od.median)[[1]]
+strain.effect.max.od.median$st.rank<-rank(strain.effect.max.od.median$st.median)
+strain.effect.max.od<-merge(strain.effect.max.od.median,strain.effect.max.od, by='st')
+
+#Calculate random effect for the serotypes (add st random effect)
+#mod.st3<-lme(max.od  ~    anaerobic*temp + Diagnosis*anaerobic ,  random =list( #st=~1,ID=~1),data=d1d)
+#nested.re<-ranef(mod.st3)
+#st.effect<-cbind.data.frame('st.effect'=nested.re$st, 'st'=row.names(nested.re$st))
+#names(st.effect)<-c('st.effect','st')
+#strain.effect.max.od<-merge(strain.effect.max.od,st.effect, by='st', all=TRUE)
+
+col.pal2 = colorRampPalette(brewer.pal(4, "Dark2") )(max(strain.effect.max.od$st.rank))
+col.pal2<- sample(col.pal2)
+plot(strain.effect.max.od$st.rank,strain.effect.max.od$`(Intercept)`, bty='n',xaxt='n', ylim=c(-0.15,0.15), ylab='Isolate residual (Max Density)', xlab='', col=col.pal2[strain.effect.max.od$st.rank], pch=16)
+abline(h=c(-0.1,-0.05,0,0.05,0.1), lty=c(3,3,2,3,3), col='lightgray', lwd=0.5)
+text(strain.effect.max.od$st.rank,-0.15, strain.effect.max.od$st, cex=0.75, xpd=NA, srt=90,col=col.pal2[strain.effect.max.od$st.rank])
+```
+
+View previous plot with MLSt information added on for strains where we have WGS data
+```{r}
+#merge in MLST
+strain.effect.max.od2<-merge(strain.effect.max.od, mlst1, by='ID', all=T)
+strain.effect.max.od2<-strain.effect.max.od2[order(strain.effect.max.od2$st, strain.effect.max.od2$mlst),]
+st.mlst.combos1<-unique(strain.effect.max.od2[,c('st','mlst')])
+st.mlst.combos1$mlst<-as.character(st.mlst.combos1$mlst)
+st.mlst.combos1<-st.mlst.combos1[!(st.mlst.combos1$mlst %in% c('NF', 'failed','<NA>', 'NF?','NF*','NF*?')) & !is.na(st.mlst.combos1$mlst) , ]
+st.mlst.combos1$mlst[st.mlst.combos1$mlst=='199*']<-'199'
+st.mlst.combos2<-split(st.mlst.combos1, st.mlst.combos1$st)
+st.mlst.combos3<- lapply(st.mlst.combos2, function(x){
+  x$index<-1:nrow(x) 
+  x$n.mlsts<-nrow(x) 
+  return(x)}
+)
+st.mlst.combos4<-do.call(rbind,st.mlst.combos3)
+#st.mlst.combos4<-st.mlst.combos4[st.mlst.combos4$n.mlsts>1,]
+strain.effect.max.od3<-merge(strain.effect.max.od2, st.mlst.combos4, by=c('st','mlst'), all=F)
+
+plot(strain.effect.max.od3$st.rank,strain.effect.max.od3$`(Intercept)`, bty='n',xaxt='n', ylim=c(-0.15,0.15), ylab='Isolate residual (Max Density)', xlab='', col=col.pal2[strain.effect.max.od3$st.rank], pch=(15+strain.effect.max.od3$index))
+abline(h=c(-0.1,-0.05,0,0.05,0.1), lty=c(3,3,2,3,3), col='lightgray', lwd=0.5)
+text(strain.effect.max.od3$st.rank,-0.15, strain.effect.max.od3$st, cex=0.75, xpd=NA, srt=90,col=col.pal2[strain.effect.max.od3$st.rank])
+
+
+```
+
+same thing with lag
+
+```{r st.effect.lag, fig.width=8, fig.height=4.5}
+#Max OD ...note can't have Dx*temp interaction bc it won't converge
+mod.st2<-lme(max.deriv2.time  ~   anaerobic*temp + Diagnosis*anaerobic ,  random = ~ 1|ID,data=d1d)
+strain.effect.max.od<-ranef(mod.st2)
+strain.effect.max.od$ID<-row.names(strain.effect.max.od)
+strain.chars<-unique(d1d[,c('ID', 'st')])
+strain.effect.max.od<-merge(strain.effect.max.od, strain.chars, by='ID' , all=TRUE)
+#Want to sort by median RE for the ST
+strain.effect.max.od.spl<-split(strain.effect.max.od, strain.effect.max.od$st)
+strain.effect.max.od.median<-as.data.frame(sapply(strain.effect.max.od.spl, function(x) median(x$'(Intercept)') ))
+names(strain.effect.max.od.median)<-'st.median'
+strain.effect.max.od.median$st<-dimnames(strain.effect.max.od.median)[[1]]
+strain.effect.max.od.median$st.rank<-rank(strain.effect.max.od.median$st.median)
+strain.effect.max.od<-merge(strain.effect.max.od.median,strain.effect.max.od, by='st')
+#And want to have different symbols for different MLSTs
+col.pal2 = colorRampPalette(brewer.pal(4, "Dark2") )(max(strain.effect.max.od$st.rank))
+col.pal2<- sample(col.pal2)
+plot(strain.effect.max.od$st.rank,strain.effect.max.od$`(Intercept)`, bty='n',yaxt='n',xaxt='n', ylim=(range(strain.effect.max.od$`(Intercept)`)*1.1), ylab='Isolate residual (Lag length)', xlab='', col=col.pal2[strain.effect.max.od$st.rank], pch=16)
+axis(side=2, at=c(-4.0,-2.0,0.0,2,4,5))
+abline(h=c(-4,-2,0,2,4,6), lty=c(3,3,2,3,3,3), col='lightgray', lwd=0.5)
+text(strain.effect.max.od$st.rank,-4, strain.effect.max.od$st, cex=0.75, xpd=NA, srt=90,col=col.pal2[strain.effect.max.od$st.rank])
+
+```
+
+same thing with max growth rate
+
+```{r st.effect.growth.rate, fig.width=8, fig.height=4.5}
+#Max OD ...note can't have Dx*temp interaction bc it won't converge
+mod.st2<-lme(max.deriv  ~   anaerobic*temp + Diagnosis*anaerobic ,  random = ~ 1|ID,data=d1d)
+strain.effect.max.od<-ranef(mod.st2)
+strain.effect.max.od$ID<-row.names(strain.effect.max.od)
+strain.chars<-unique(d1d[,c('ID', 'st')])
+strain.effect.max.od<-merge(strain.effect.max.od, strain.chars, by='ID' , all=TRUE)
+#Want to sort by median RE for the ST
+strain.effect.max.od.spl<-split(strain.effect.max.od, strain.effect.max.od$st)
+strain.effect.max.od.median<-as.data.frame(sapply(strain.effect.max.od.spl, function(x) median(x$'(Intercept)') ))
+names(strain.effect.max.od.median)<-'st.median'
+strain.effect.max.od.median$st<-dimnames(strain.effect.max.od.median)[[1]]
+strain.effect.max.od.median$st.rank<-rank(strain.effect.max.od.median$st.median)
+strain.effect.max.od<-merge(strain.effect.max.od.median,strain.effect.max.od, by='st')
+#And want to have different symbols for different MLSTs
+col.pal2 = colorRampPalette(brewer.pal(4, "Dark2") )(max(strain.effect.max.od$st.rank))
+col.pal2<- sample(col.pal2)
+plot(strain.effect.max.od$st.rank,strain.effect.max.od$`(Intercept)`, bty='n',yaxt='n',xaxt='n', ylim=(range(strain.effect.max.od$`(Intercept)`)*1.1), ylab='Isolate residual (Max growth rate)', xlab='', col=col.pal2[strain.effect.max.od$st.rank], pch=16)
+axis(side=2, at=c(-0.2,0.0,0.2,0.4))
+abline(h=c(-0.2,0.0,0.2,0.4), lty=c(3,2,3,3), col='lightgray', lwd=0.5)
+text(strain.effect.max.od$st.rank,-0.2, strain.effect.max.od$st, cex=0.75, xpd=NA, srt=90,col=col.pal2[strain.effect.max.od$st.rank])
+
+```
+
+same thing with OD at early time point
+
+```{r st.effect.fixed.time, fig.width=8, fig.height=4.5}
+#Max OD ...note can't have Dx*temp interaction bc it won't converge
+mod.st2<-lme(log(od.fixed.time+0.01)  ~   anaerobic*temp + Diagnosis*anaerobic ,  random = ~ 1|ID,data=od.fixed.time)
+strain.effect.max.od<-ranef(mod.st2)
+strain.effect.max.od$ID<-row.names(strain.effect.max.od)
+strain.chars<-unique(d1d[,c('ID', 'st')])
+strain.effect.max.od<-merge(strain.effect.max.od, strain.chars, by='ID' , all=TRUE)
+#Want to sort by median RE for the ST
+strain.effect.max.od.spl<-split(strain.effect.max.od, strain.effect.max.od$st)
+strain.effect.max.od.median<-as.data.frame(sapply(strain.effect.max.od.spl, function(x) median(x$'(Intercept)') ))
+names(strain.effect.max.od.median)<-'st.median'
+strain.effect.max.od.median$st<-dimnames(strain.effect.max.od.median)[[1]]
+strain.effect.max.od.median$st.rank<-rank(strain.effect.max.od.median$st.median)
+strain.effect.max.od<-merge(strain.effect.max.od.median,strain.effect.max.od, by='st')
+#And want to have different symbols for different MLSTs
+col.pal2 = colorRampPalette(brewer.pal(4, "Dark2") )(max(strain.effect.max.od$st.rank))
+col.pal2<- sample(col.pal2)
+plot(strain.effect.max.od$st.rank,strain.effect.max.od$`(Intercept)`, bty='n',yaxt='n',xaxt='n', ylim=(range(strain.effect.max.od$`(Intercept)`)*1.1), ylab='Isolate residual (OD early time)', xlab='', col=col.pal2[strain.effect.max.od$st.rank], pch=16)
+axis(side=2, at=c(-0.8,-0.4,-0.2,0.0,0.2,0.4,1,2))
+abline(h=c(-0.8,-0.4,-0.2,0.0,0.2,0.4,1,2), lty=c(3,3,3,2,3,3,3,3), col='lightgray', lwd=0.5)
+text(strain.effect.max.od$st.rank,-0.8, strain.effect.max.od$st, cex=0.75, xpd=NA, srt=90,col=col.pal2[strain.effect.max.od$st.rank])
+
+```
+
+## Correlate growth characteristics with serotype capsule and epi characteristics
+
+```{r merge.growth.cov}
+growth.dat<-coef.st.regs.plot
+growth.dat$st<-substring(row.names(coef.st.regs.plot), first=3)
+carr1<-cov1[,c('st','SLEEMANCARRN','TROTTERCARRN','NORWAYCARR_PRE','MASSCARR01' ,'GREECECARRN')]
+carr1$st[carr1$st %in% c('15B','15C')]<-'15BC'
+carr2<-aggregate(carr1[,-1], by=list(carr1$st), FUN=sum)
+names(carr2)[1]<-'st'
+carr.comp1a<-merge(growth.dat,carr2, by='st', all=T )
+carr.comp1a[carr.comp$st=='14', c('coef.st.fixed.od.1.2','coef.st.max.od.1.2', 'coef.st.lag.length.1.2',
+                          'coef.growth.rate.1.2')]<-0 #reference level
+
+
+#MERGE together all coefficients
+carr.comp<-merge(growth.dat,cov1, by='st', all=T )
+carr.comp[carr.comp$st=='14', c('coef.st.fixed.od.1.2','coef.st.max.od.1.2', 'coef.st.lag.length.1.2',
+                          'coef.growth.rate.1.2')]<-0 #reference level
+carr.comp$sqrt.ave.carr.pre<- sqrt(carr.comp$ave_carr_pre)
+
+```
+
+Test carriage data from 4 different settings against the 4 growth characteristics. This shows that in all 4 settings, the best correlate of pre-PCV prevalence was OD at an early time point. AND best best is OD at early time point under *aerobic* conditions with catalase. For other predictors, it depended on the dataset which was best
+```{r carr.cor}
+#Corr with carriage data
+reg.func<-function( covar1, carr.var){
+  form1<-as.formula( paste0(carr.var,'~', covar1))
+  carr.comp[is.na(carr.comp[,carr.var]),carr.var]<-0 #if carriage not observed set to 0
+  reg.pc1<-glm(form1 , data=carr.comp1a, family='poisson')
+  out.obj<-list('reg.pc1'=reg.pc1, 'carr.var'=carr.var, 'covar1'=covar1)
+  return(out.obj)
+}
+covar.list<-names(coef.st.regs.plot)[-ncol(coef.st.regs.plot)]
+carr.vars<-c('SLEEMANCARRN','TROTTERCARRN','NORWAYCARR_PRE','MASSCARR01' ,'GREECECARRN')
+for(i in carr.vars){
+reg.results<-lapply(covar.list, reg.func, carr.var=i  )
+aic<-sapply(reg.results, function(x) AIC(x$reg.pc1) )
+print(i)
+print(cbind.data.frame(covar.list,aic))
+  plot(carr.comp1a[,covar.list[3]], carr.comp1a[,i], bty='l')
+  title(paste(covar.list[3], i))
+}
+```
+
+```{r lm.test.func, echo=FALSE}
+#Create a general function that can be called to test different covariates
+#Corr with CFR (Harboe et al., PLOS Medicine)
+reg.func.lm<-function( outcome.name,covar1,ds=carr.comp, wgt=NULL){
+  form1<-as.formula( paste0(outcome.name,'~', covar1))
+  reg.pc1<-lm(form1 , data=ds,  weights=wgt)
+  out.obj<-list('reg.pc1'=reg.pc1,  'covar1'=covar1,'outcome'=outcome.name)
+  return(out.obj)
+}
+covar.list<-names(coef.st.regs.plot)[-ncol(coef.st.regs.plot)]
+
+
+#Or logistic model
+reg.func.logistic<-function( outcome.name,covar1,ds=carr.comp, wgt=NULL){
+  form1<-as.formula( paste0(outcome.name,'~', covar1))
+  reg.pc1<-glm(form1 , data=ds,  family='binomial' )
+  out.obj<-list('reg.pc1'=reg.pc1,  'covar1'=covar1,'outcome'=outcome.name)
+  return(out.obj)
+}
+```
+
+CFR model. None of the growth variables was correlated
+
+```{r, cfrmod}
+reg.results<-lapply(covar.list, reg.func.lm, outcome.name='CFRHARBOE')
+aic<-lapply(reg.results, function(x) AIC(x$reg.pc1) )
+print(aic)
+  plot(carr.comp[,covar.list[1]], carr.comp[,"CFRHARBOE"], bty='l')
+  title(paste(covar.list[1], ' CFR'))
+#summary(reg.results[[2]]$reg.pc1)
+```
+
+Ps complexity (carbon per repeat unit)--no correlation observed
+
+```{r, carbonmod}
+reg.results<-lapply(covar.list, reg.func.lm, outcome.name='TOTALCARBONREPEAT')
+aic<-lapply(reg.results, function(x) AIC(x$reg.pc1) )
+print(aic)
+  plot(carr.comp[,covar.list[1]], carr.comp[,"TOTALCARBONREPEAT"], bty='l')
+  title(paste(covar.list[1], ' CFR'))
+#summary(reg.results[[3]]$reg.pc1)
+```
+
+Invasiveness estimates (from Weingerger et al AJE paper); use inverse variance weights
+```{r}
+inv2<-merge(carr.comp, inv1, by='st' , all=TRUE)
+trans.red<-rgb(1,0,0, alpha=0.5)
+symbols(inv2$coef.st.fixed.od.1.2, inv2$log.inv.age1, sqrt(inv2$log.inv.prec.age1/pi),inches=0.35, bty='l',fg="white", bg=trans.red, xlab="Early od", ylab="log(Invasiveness")
+text(inv2$coef.st.fixed.od.1.2, inv2$log.inv.age1, inv2$st, cex=0.75)
+
+reg.inv<-lapply(covar.list, reg.func.lm, outcome.name='log.inv.age1',ds=inv2, wgt=inv2$log.inv.prec.age1)
+aic<-lapply(reg.inv, function(x) AIC(x$reg.pc1) )
+print(aic)
+ 
+#summary(reg.results[[3]]$reg.pc1)
+ 
+```
+
+## PS components
+Maximum density is best predictor of presence of NAC; positive correlation between presence of NAC and Max OD; negative association between presence of uronic acid and max density
+```{r ps.component.reg}
+ps2<-merge(carr.comp, ps1, by='st' , all=TRUE)
+ps2$NAC<-0
+ps2$NAC[ps2$GlcNAc==1 | ps2$GalNAc==1 | ps2$ManNAc==1 |  ps2$ManNAcA==1 |ps2$FucNAc==1 |ps2$PneNAc ==1] <-1
+ps2$uronic<-0
+ps2$uronic[ps2$GalA==1 |ps2$GlcA==1 ]<-1  #GlcA and GalA derived from same pathway
+
+#test n-acetylated sugars
+ps.reg.results.NAC<-lapply(covar.list, reg.func.logistic,ds=ps2, outcome.name='NAC')
+aic.NAC<-sapply(ps.reg.results.NAC, function(x) AIC(x$reg.pc1) )
+print(cbind.data.frame(covar.list,aic.NAC))
+#summary(ps.reg.results.NAC[[4]]$reg.pc1)
+#summary(ps.reg.results.NAC[[7]]$reg.pc1)
+#summary(ps.reg.results.NAC[[8]]$reg.pc1)
+#summary(ps.reg.results.NAC[[1]]$reg.pc1)
+
+#test uronic acids
+ps.reg.results.UA<-lapply(covar.list, reg.func.logistic,ds=ps2, outcome.name='uronic')
+aic.uronic<-sapply(ps.reg.results.UA, function(x) AIC(x$reg.pc1) )
+print(cbind.data.frame(covar.list,aic.uronic))
+#summary(ps.reg.results.UA[[4]]$reg.pc1)
+#summary(ps.reg.results.UA[[7]]$reg.pc1)
+#summary(ps.reg.results.UA[[8]]$reg.pc1)
+#summary(ps.reg.results.UA[[2]]$reg.pc1)
+
+table(ps2$uronic,ps2$NAC)
+
+#multivariate with both uronic and coef.st as predictors
+reg.both<-lm( coef.st.max.od.1.2~ NAC+uronic, data=ps2)
+summary(reg.both)
+
+```
+
+```{r st.effect.ps, fig.width=10}
+#Max OD
+
+d1.ps<-merge(d1d, ps1, by='st')
+d1.ps$NAC<-0
+d1.ps$NAC[d1.ps$GlcNAc==1 | d1.ps$GalNAc==1 | d1.ps$ManNAc==1 |  d1.ps$ManNAcA==1 |d1.ps$FucNAc==1 |d1.ps$PneNAc ==1] <-1
+d1.ps$uronic<-0
+d1.ps$uronic[d1.ps$GalA==1 |d1.ps$GlcA==1 ]<-1  #GlcA and GalA derived from same pathway
+
+mod.st<-lme(max.od  ~ uronic +  anaerobic*temp + Diagnosis*anaerobic ,  random = ~ 1|ID,data=d1.ps)
+summary(mod.st)
+
+```
+
+## figure 6
+```{r fig6,fig.width=8, fig.height=4}
+#Figure 6 OF PC2 vs components
+#tiff('fig 6.tiff',width=8, height=4, units='in', res=300)
+
+par(mfrow=c(1,2), mar=c(4,4,1,1))
+plot(carr.comp$coef.st.fixed.od.1.2, carr.comp$SLEEMANCARRN, col='white', bty='l', xlab='Serotype effect on growth (Density at early time point)' ,ylab='Pre-vaccine carriage')
+text(carr.comp$coef.st.fixed.od.1.2, carr.comp$SLEEMANCARRN, carr.comp$st, xpd=NA)
+
+symbols(inv2$coef.st.fixed.od.1.2, inv2$log.inv.age1, sqrt(inv2$log.inv.prec.age1/pi),inches=0.1, bty='l',fg="white", bg=trans.red, xlab="PC2 (Density at early time point)", ylab="log(Invasiveness)", bty='l')
+text(inv2$coef.st.fixed.od.1.2, inv2$log.inv.age1, inv2$st, cex=0.75, col='gray', adj=c(1,1), xpd=NA)
+
+#dev.off()
+```
+
+ 
+
+## Plot knockouts and CPS switch variants
+```{r fig.ko, echo=FALSE,fig.width=8, fig.height=6}
+#######SUPPLEMENTARY FIGURE PLOTTING TIGR ISOLATES
+####CHANGE OPTIONS HERE FOR PLOT SELECTION
+sub1<-par(mfrow=c(1,1))
+#names(d1_agg2)[1]<-'temp.lab'
+d1a.agg$anaerobic<-as.numeric(as.character(d1a.agg$anaerobic))
+d1a.agg$temp<-as.numeric(as.character(d1a.agg$temp))
+d1a.agg$st<-as.character(d1a.agg$st)
+ts.col2<-ts.col[2:4]
+#TIGR4 strains; stratified by strain and condition
+#tiff('TIGR cps switch by strain.tiff',width=11, height=5.3, units='in', res=400)
+par(mfcol=c(3,4),mar=c(2,3,1,1))
+for(st.select in c('5','14','19F','cps-')){ #Body sites
+  for(ana.select in c(0,2,1)){  #Catalase, anaerobic, aertobic
+    id.composite<-paste0(d1a.agg$ID,d1a.agg$st,d1a.agg$temp,d1a.agg$anaerobic)
+    d1.df<-d1a.agg[ duplicated(id.composite)==FALSE & d1a.agg$anaerobic %in% c(ana.select) & d1a.agg$Diagnosis %in% c(8)  & d1a.agg$st %in% st.select, ]
+    d1.df<-d1.df[ order(-d1.df$anaerobic, -d1.df$temp, d1.df$st), ]
+    hm.df<-(as.matrix(d1.df[ , 10:52]))
+    max.ts.time<-apply(t(hm.df),2,which.max)/2 -0.5 #time at which max is achieved for each TS
+    max.ts.od<-apply(t(hm.df),2,max, na.rm=TRUE) #OD at  max  for each TS
+    temp.lab<-as.numeric(as.factor(d1.df$temp))
+    matplot(seq(from=0, to=(nrow(t(hm.df))-1)/2, by=0.5),t(hm.df),lwd=2,  type="l",lty=1,yaxt='n', col=ts.col2[temp.lab],xlab="Time (h)",bty="n", ylab="OD",ylim=c(0,0.5) )
+    if(st.select=='5'){axis(side=2 ,at=c(0,0.1,0.2,0.3,0.4,0.5))    } #if yaxt='n'
+    text(max.ts.time, max.ts.od+0.02, d1.df$temp, col=ts.col2[temp.lab], cex=0.75 )
+    if(ana.select==0){title(paste0("TIGR4:",st.select))}
+  }
+}
+#dev.off()
+```
+
+TIGR4 KO and CPS switches
+
+
+```{r tigr1, echo=FALSE,fig.width=8, fig.height=4}
+#TIGR STRAINS, stratified by temp and oxygen
+#tiff('TIGR cps switch by temp and o2.tiff',width=11, height=5.3, units='in', res=400)
+col3=c('#66c2a5','#fc8d62', '#8da0cb', '#e78ac3' )
+par(mfcol=c(2,3),mar=c(2,3,1,1))
+for(temp.select in c('33','35','37')){ #Body sites
+  for(ana.select in c(2,1)){  #Catalase, anaerobic, aertobic
+    id.composite<-paste0(d1a.agg$ID,d1a.agg$st,d1a.agg$temp,d1a.agg$anaerobic)
+    d1.df<-d1a.agg[  d1a.agg$anaerobic %in% c(ana.select) & d1a.agg$Diagnosis %in% c(8)  & d1a.agg$st %in% c('5','14','19F','cps-') & d1a.agg$temp ==temp.select, ]
+    d1.df<-d1.df[ order(-d1.df$anaerobic, -d1.df$temp, d1.df$st), ]
+    hm.df<-(as.matrix(d1.df[ , 10:52]))
+    max.ts.time<-apply(t(hm.df),2,which.max)/2 -0.5 #time at which max is achieved for each TS
+    max.ts.od<-apply(t(hm.df),2,max, na.rm=TRUE) #OD at  max  for each TS
+    st.lab<-as.numeric(as.factor(d1.df$st))
+    matplot(seq(from=0, to=(nrow(t(hm.df))-1)/2, by=0.5),t(hm.df),lwd=2,  type="l",lty=1,yaxt='n', col=col3[st.lab],xlab="Time (h)",bty="n", ylab="OD",ylim=c(0,0.5) )
+    if(temp.select=='33'){axis(side=2 ,at=c(0,0.1,0.2,0.3,0.4,0.5))    } #if yaxt='n'
+    text(max.ts.time, max.ts.od+0.02, d1.df$st, col=col3[st.lab], cex=0.75 )
+    if(ana.select==0){title(paste0(temp.select))}
+  }
+}
+#dev.off()
+```
+
+Serotype 15B and KO
+
+```{r ko15b, echo=FALSE,fig.width=8, fig.height=4}
+#15B CPS knockouts
+#tiff('cpsKO_15B.tiff',width=11, height=5.3, units='in', res=400)
+col3=c('#66c2a5','#fc8d62', '#8da0cb', '#e78ac3' )
+par(mfcol=c(2,3),mar=c(2,3,1,1))
+id.select1<-c('15B-','CDC_15B')
+id.select2<-c( '10A-', 'CDC10A')
+for(temp.select in c('33','35','37')){ #Body sites
+  for(ana.select in c(2,1)){  #Catalase, anaerobic, aertobic
+    id.keep<- grepl(id.select1[1],d1a.agg$ID) + grepl(id.select1[2],d1a.agg$ID)
+    id.composite<-paste0(d1a.agg$ID,d1a.agg$st,d1a.agg$temp,d1a.agg$anaerobic)
+    d1.df<-d1a.agg[  id.keep==TRUE & d1a.agg$anaerobic %in% c(ana.select) & d1a.agg$temp ==temp.select, ]
+    d1.df<-d1.df[ order(-d1.df$anaerobic, -d1.df$temp, d1.df$st), ]
+    d1.df$st[d1.df$st=='15B-'] <-'cps-'
+    d1.df$st[d1.df$st=='15BC'] <-'15B'
+    d1.df$st[d1.df$st=='10A-'] <-'cps-'
+    hm.df<-(as.matrix(d1.df[ , 10:52]))
+    max.ts.time<-apply(t(hm.df),2,which.max)/2 -0.5 #time at which max is achieved for each TS
+    max.ts.od<-apply(t(hm.df),2,max, na.rm=TRUE) #OD at  max  for each TS
+    st.lab<-as.numeric(as.factor(d1.df$st))
+    matplot(seq(from=0, to=(nrow(t(hm.df))-1)/2, by=0.5),t(hm.df),lwd=2,  type="l",lty=1,yaxt='n', col=col3[st.lab],xlab="Time (h)",bty="n", ylab="OD",ylim=c(0,0.5) )
+    if(temp.select=='33'){axis(side=2 ,at=c(0,0.1,0.2,0.3,0.4,0.5))    } #if yaxt='n'
+    text(max.ts.time, max.ts.od+0.02, d1.df$st, col=col3[st.lab], cex=0.75 )
+    if(ana.select==0){title(paste0(temp.select))}
+  }
+}
+#dev.off()
+```
+
+Serotype 10A and KO
+```{r ko10A, echo=FALSE,fig.width=8, fig.height=6}
+#10A CPS knockouts
+#tiff('cpsKO 10A.tiff',width=11, height=5.3, units='in', res=400)
+col3=c('#66c2a5','#fc8d62', '#8da0cb', '#e78ac3' )
+par(mfcol=c(2,3),mar=c(2,3,1,1))
+id.select1<-c('15B-','CDC_15B')
+id.select2<-c( '10A-', 'CDC_10A')
+for(temp.select in c('33','35','37')){ #Body sites
+  for(ana.select in c(2,1)){  #Catalase, anaerobic, aertobic
+    id.keep<- grepl(id.select2[1],d1a.agg$ID) + grepl(id.select2[2],d1a.agg$ID)
+    id.composite<-paste0(d1a.agg$ID,d1a.agg$st,d1a.agg$temp,d1a.agg$anaerobic)
+    d1.df<-d1a.agg[  id.keep==TRUE & d1a.agg$anaerobic %in% c(ana.select) & d1a.agg$temp ==temp.select, ]
+    #d1.df<-d1_agg2[d1_agg2$st==st.select & d1_agg2$anaerobic %in% c(ana.select) & d1_agg2$Diagnosis %in% c(dx.select) &d1_agg2$ID %in% id.select.11a ,]
+    d1.df<-d1.df[ order(-d1.df$anaerobic, -d1.df$temp, d1.df$st), ]
+    d1.df$st[d1.df$st=='15B-'] <-'cps-'
+    d1.df$st[d1.df$st=='15BC'] <-'15B'
+    d1.df$st[d1.df$st=='10A-'] <-'cps-'
+    hm.df<-(as.matrix(d1.df[ , 10:52]))
+    max.ts.time<-apply(t(hm.df),2,which.max)/2 -0.5 #time at which max is achieved for each TS
+    max.ts.od<-apply(t(hm.df),2,max, na.rm=TRUE) #OD at  max  for each TS
+    st.lab<-as.numeric(as.factor(d1.df$st))
+    matplot(seq(from=0, to=(nrow(t(hm.df))-1)/2, by=0.5),t(hm.df),lwd=2,  type="l",lty=1,yaxt='n', col=col3[st.lab],xlab="Time (h)",bty="n", ylab="OD",ylim=c(0,0.5) )
+    if(temp.select=='33'){axis(side=2 ,at=c(0,0.1,0.2,0.3,0.4,0.5))    } #if yaxt='n'
+    text(max.ts.time, max.ts.od+0.02, d1.df$st, col=col3[st.lab], cex=0.75 )
+    if(ana.select==0){title(paste0(temp.select))}
+  }
+}
+#dev.off()
+```
+
+```{r ko603, echo=FALSE,fig.width=8, fig.height=4}
+#603 6B CPS knockouts
+#tiff('cpsKO 603.tiff',width=11, height=5.3, units='in', res=400)
+col3=c('#66c2a5','#fc8d62', '#8da0cb', '#e78ac3' )
+par(mfcol=c(2,3),mar=c(2,3,1,1))
+for(temp.select in c('33','35','37')){ #Body sites
+  for(ana.select in c(2,1)){  #Catalase, anaerobic, aertobic
+    id.keep<- grepl(id.select2[1],d1a.agg$ID) + grepl(id.select2[2],d1a.agg$ID)
+    id.composite<-paste0(d1a.agg$ID,d1a.agg$st,d1a.agg$temp,d1a.agg$anaerobic)
+    d1.df<-d1a.agg[  d1a.agg$Diagnosis==7 & d1a.agg$anaerobic %in% c(ana.select) & d1a.agg$temp ==temp.select, ]
+    d1.df<-d1.df[ order(-d1.df$anaerobic, -d1.df$temp, d1.df$st), ]
+    hm.df<-(as.matrix(d1.df[ , 10:52]))
+    max.ts.time<-apply(t(hm.df),2,which.max)/2 -0.5 #time at which max is achieved for each TS
+    max.ts.od<-apply(t(hm.df),2,max, na.rm=TRUE) #OD at  max  for each TS
+    st.lab<-as.numeric(as.factor(d1.df$st))
+    matplot(seq(from=0, to=(nrow(t(hm.df))-1)/2, by=0.5),t(hm.df),lwd=2,  type="l",lty=1,yaxt='n', col=col3[st.lab],xlab="Time (h)",bty="n", ylab="OD",ylim=c(0,0.5) )
+    if(temp.select=='33'){axis(side=2 ,at=c(0,0.1,0.2,0.3,0.4,0.5))    } #if yaxt='n'
+    text(max.ts.time, max.ts.od+0.02, d1.df$st, col=col3[st.lab], cex=0.75 )
+    if(ana.select==0){title(paste0(temp.select))}
+  }
+}
+#dev.off()
+```

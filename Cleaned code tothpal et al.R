@@ -16,6 +16,20 @@ library(phia)
 library(data.table)
 require(caret)
 
+mlst1<-read.csv('./GrowthVariation/sample_info_with_mlst.csv')
+mlst1<-mlst1[,c('yale_code','pneumocat_serotype','ST')]
+names(mlst1)<-c('ID','seq.st', 'mlst')
+
+mlst.count<-split(mlst1, mlst1$mlst)
+mlst.count<-sapply(mlst.count, function(x) nrow(x))
+mlst.count<-as.data.frame(mlst.count)
+mlst.count$mlst<- row.names(mlst.count)
+mlst1<-merge(mlst1,mlst.count, by='mlst')
+mlst1$ID<-as.character(mlst1$ID)
+cdc.strains<-substr(mlst1$ID,1,1) !="H" &substr(mlst1$ID,1,1) !="D"
+mlst1$ID[cdc.strains]<- paste0('CDC_',mlst1$ID[cdc.strains])
+
+
 ##IMPORT AND CLEAN DATA, get rid of unneeded variables; fix some serotype coding issues
 d1a<- read.csv("master 5_24_2018.csv")
 d1a$st[which(d1a$st=="11")]<-"11A"
@@ -31,10 +45,6 @@ d1a$Pen<-NULL
 d1a$Pathogen<-NULL
 d1a$Pilus<-NULL
 d1a$Variant<-NULL
-ID2<-paste(d1a$Group,d1a$st,d1a$Diagnosis,sep="_")
-d1a<-cbind.data.frame(ID2, d1a)
-d1a$ID<-as.character(d1a$ID)
-d1a$ID[d1a$ID==""]<-as.character(d1a$ID2[d1a$ID==""])
 d1a$ID<-as.factor(d1a$ID)
 d1a$Group<-NULL
 d1a$Diagnosis[substr(d1a$st,1,3)=="603"]<-7 #isogenic
@@ -50,11 +60,19 @@ d1a<-d1a[d1a$temp>=30 & d1a$temp<=39,] #Restrict analysis to 30-39C (higher and 
 d1a<-d1a[d1a$st !="unknown",]
 d1a<-d1a[d1a$st !="GBS",]
 d1a<-d1a[which(!is.na(d1a$Diagnosis)),]
+d1a$ID<-as.character(d1a$ID)
+d1a<-merge(mlst1,d1a, by='ID', all=TRUE)
+
+ID2<-paste(d1a$Group,d1a$st,d1a$Diagnosis,sep="_")
+d1a<-cbind.data.frame(ID2, d1a)
+d1a$ID<-as.character(d1a$ID)
+d1a$ID[d1a$ID==""]<-as.character(d1a$ID2[d1a$ID==""])
+
 
 ## blank based on t=0
 d1a$X1[d1a$X1>d1a$X2]<- d1a$X2[d1a$X1>d1a$X2]
-d1a[,7:ncol(d1a)]<-d1a[,7:ncol(d1a)] - (d1a$X1) #
-d1a[,7:ncol(d1a)][d1a[,7:ncol(d1a)]<0]<-0  #Values must be >=0
+d1a[,10:ncol(d1a)]<-d1a[,10:ncol(d1a)] - (d1a$X1) #
+d1a[,10:ncol(d1a)][d1a[,10:ncol(d1a)]<0]<-0  #Values must be >=0
 
 #Fix coding for isogenic strains
 d1a$st[d1a$st=="NT"]<-"cps-"
@@ -71,6 +89,15 @@ d1a$st[d1a$st=="R6"]<-"cps-"
 st.dx.table<- as.data.frame.matrix(table(d1a$st, d1a$Diagnosis))
 st.keep.dx<- row.names(st.dx.table)[st.dx.table$'5'!=0 & st.dx.table$'0'!=0] 
 
+#Fig
+tiff('all.ts1.tiff',width=11, height=4.3, units='in', res=400)
+par(mfrow=c(1,3))
+trans.black<-rgb(0,0,0,alpha=0.1)
+matplot(c(1:48)/2, t(d1a[d1a$anaerobic=='0',11:58]),xlab="Time (hours)", main='Aerobic',ylab='Density (OD600)', type='l',lty=1, bty='l', col=trans.black)
+matplot(c(1:48)/2,t(d1a[d1a$anaerobic=='2',11:58]),xlab="Time (hours)",main="Aerobic+Catalase",ylab='Density (OD600)', type='l',lty=1, bty='l', col=trans.black)
+matplot(c(1:48)/2,t(d1a[d1a$anaerobic=='1',11:58]),xlab="Time (hours)",main='Anaerobic',ylab='Density (OD600)', type='l',lty=1, bty='l', col=trans.black)
+dev.off()
+
 
 #tabulate # replicates for each condition
 d1.tab<-d1a[,c('ID','st','anaerobic','Diagnosis','temp' )]
@@ -79,8 +106,8 @@ tab1<-setDT(d1.tab)[,list(Count=.N) ,names(d1.tab)]
 ####Generate average curves for use in plotting (average over replictes of same isolate)
 d1a.agg<-d1a
 d1a.agg$max.od<-NULL
-d1_agg2<-aggregate(d1a.agg[,-c(1:6)], list(d1a.agg$ID2,d1a.agg$st, d1a.agg$anaerobic, d1a.agg$temp, d1a.agg$ID,d1a.agg$Diagnosis), mean, na.rm=TRUE)
-names(d1_agg2)[1:6]<-names(d1a.agg)[1:6]
+d1_agg2<-aggregate(d1a.agg[,-c(1:9)], list(d1a.agg$ID2,d1a.agg$st, d1a.agg$anaerobic, d1a.agg$temp, d1a.agg$ID,d1a.agg$Diagnosis), mean, na.rm=TRUE)
+names(d1_agg2)[1:6]<-c('ID2','st','anaerobic', 'temp','ID','Diagnosis')
 
 ##################################################################
 #PLOTS FOR PAPER: Figure 1 and supplementary figures with isogenic and capsule KO strains
@@ -105,7 +132,7 @@ for(dx.select in c(0)){ #Body sites
     id.composite<-paste0(d1a.agg$ID,d1a.agg$st,d1a.agg$temp,d1a.agg$anaerobic)
     d1.df<-d1a.agg[d1a.agg$st==st.select & duplicated(id.composite)==FALSE & d1a.agg$anaerobic %in% c(ana.select) & d1a.agg$Diagnosis %in% c(dx.select) &d1a.agg$ID %in% id.select.19F, ]
     d1.df<-d1.df[ order(-d1.df$anaerobic, -d1.df$temp, d1.df$st), ]
-    hm.df<-(as.matrix(d1.df[ , 7:52]))
+    hm.df<-(as.matrix(d1.df[ , 10:52]))
     max.ts.time<-apply(t(hm.df),2,which.max)/2 -0.5 #time at which max is achieved for each TS
     max.ts.od<-apply(t(hm.df),2,max, na.rm=TRUE) #OD at  max  for each TS
     temp.lab<-as.numeric(as.factor(d1.df$temp))
@@ -133,7 +160,7 @@ for(st.select in c('5','14','19F','cps-')){ #Body sites
     id.composite<-paste0(d1a.agg$ID,d1a.agg$st,d1a.agg$temp,d1a.agg$anaerobic)
     d1.df<-d1a.agg[ duplicated(id.composite)==FALSE & d1a.agg$anaerobic %in% c(ana.select) & d1a.agg$Diagnosis %in% c(8)  & d1a.agg$st %in% st.select, ]
     d1.df<-d1.df[ order(-d1.df$anaerobic, -d1.df$temp, d1.df$st), ]
-    hm.df<-(as.matrix(d1.df[ , 7:52]))
+    hm.df<-(as.matrix(d1.df[ , 10:52]))
     max.ts.time<-apply(t(hm.df),2,which.max)/2 -0.5 #time at which max is achieved for each TS
     max.ts.od<-apply(t(hm.df),2,max, na.rm=TRUE) #OD at  max  for each TS
     temp.lab<-as.numeric(as.factor(d1.df$temp))
@@ -154,7 +181,7 @@ for(temp.select in c('33','35','37')){ #Body sites
     id.composite<-paste0(d1a.agg$ID,d1a.agg$st,d1a.agg$temp,d1a.agg$anaerobic)
     d1.df<-d1a.agg[  d1a.agg$anaerobic %in% c(ana.select) & d1a.agg$Diagnosis %in% c(8)  & d1a.agg$st %in% c('5','14','19F','cps-') & d1a.agg$temp ==temp.select, ]
     d1.df<-d1.df[ order(-d1.df$anaerobic, -d1.df$temp, d1.df$st), ]
-    hm.df<-(as.matrix(d1.df[ , 7:52]))
+    hm.df<-(as.matrix(d1.df[ , 10:52]))
     max.ts.time<-apply(t(hm.df),2,which.max)/2 -0.5 #time at which max is achieved for each TS
     max.ts.od<-apply(t(hm.df),2,max, na.rm=TRUE) #OD at  max  for each TS
     st.lab<-as.numeric(as.factor(d1.df$st))
@@ -181,7 +208,7 @@ for(temp.select in c('33','35','37')){ #Body sites
     d1.df$st[d1.df$st=='15B-'] <-'cps-'
     d1.df$st[d1.df$st=='15BC'] <-'15B'
     d1.df$st[d1.df$st=='10A-'] <-'cps-'
-    hm.df<-(as.matrix(d1.df[ , 7:52]))
+    hm.df<-(as.matrix(d1.df[ , 10:52]))
     max.ts.time<-apply(t(hm.df),2,which.max)/2 -0.5 #time at which max is achieved for each TS
     max.ts.od<-apply(t(hm.df),2,max, na.rm=TRUE) #OD at  max  for each TS
     st.lab<-as.numeric(as.factor(d1.df$st))
@@ -208,7 +235,7 @@ for(temp.select in c('33','35','37')){ #Body sites
     d1.df$st[d1.df$st=='15B-'] <-'cps-'
     d1.df$st[d1.df$st=='15BC'] <-'15B'
     d1.df$st[d1.df$st=='10A-'] <-'cps-'
-    hm.df<-(as.matrix(d1.df[ , 7:52]))
+    hm.df<-(as.matrix(d1.df[ , 10:52]))
     max.ts.time<-apply(t(hm.df),2,which.max)/2 -0.5 #time at which max is achieved for each TS
     max.ts.od<-apply(t(hm.df),2,max, na.rm=TRUE) #OD at  max  for each TS
     st.lab<-as.numeric(as.factor(d1.df$st))
@@ -230,7 +257,7 @@ for(temp.select in c('33','35','37')){ #Body sites
     id.composite<-paste0(d1a.agg$ID,d1a.agg$st,d1a.agg$temp,d1a.agg$anaerobic)
     d1.df<-d1a.agg[  d1a.agg$Diagnosis==7 & d1a.agg$anaerobic %in% c(ana.select) & d1a.agg$temp ==temp.select, ]
     d1.df<-d1.df[ order(-d1.df$anaerobic, -d1.df$temp, d1.df$st), ]
-    hm.df<-(as.matrix(d1.df[ , 7:52]))
+    hm.df<-(as.matrix(d1.df[ , 10:52]))
     max.ts.time<-apply(t(hm.df),2,which.max)/2 -0.5 #time at which max is achieved for each TS
     max.ts.od<-apply(t(hm.df),2,max, na.rm=TRUE) #OD at  max  for each TS
     st.lab<-as.numeric(as.factor(d1.df$st))
@@ -247,13 +274,13 @@ d1a$anaerobic<- relevel(as.factor(d1a$anaerobic), ref = '1')
 d1a$st<- relevel(as.factor(d1a$st), ref = '14') 
 d1a$temp<- relevel(as.factor(d1a$temp), ref = '33') #reference
 d1a$Diagnosis<- relevel(as.factor(d1a$Diagnosis), ref = '5') #Sepsis as reference
-max.od<-apply(d1a[,-c(1:6)],1,max, na.rm=TRUE)
-ts<-d1a[,-c(1:6)] #times series only
-t.past.mid.log<- ts >= max.od/2 #is OD past mid point?
-t.past.mid.log.cumsum<-apply(t.past.mid.log,1,cumsum)
-t.past.mid.log.cumsum2<-apply(t.past.mid.log.cumsum,2,cumsum) #if multiple with value of 1, take first
-t.midpoint<-unlist(apply(t.past.mid.log.cumsum2,2,function(x) which(x==1)/2))
-d1a<-cbind.data.frame(max.od,t.midpoint,d1a)
+max.od<-apply(d1a[,-c(1:9)],1,max, na.rm=TRUE)
+# ts<-d1a[,-c(1:9)] #times series only
+# t.past.mid.log<- ts >= max.od/2 #is OD past mid point?
+# t.past.mid.log.cumsum<-apply(t.past.mid.log,1,cumsum)
+# t.past.mid.log.cumsum2<-apply(t.past.mid.log.cumsum,2,cumsum) #if multiple with value of 1, take first
+# t.midpoint<-unlist(apply(t.past.mid.log.cumsum2,2,function(x) which(x==1)/2))
+d1a<-cbind.data.frame(max.od,d1a)
 d1a<-d1a[d1a$max.od>=0.05,]    #FILTER OUT IF MAX OD <0.05
 
 #Format data for regression
@@ -284,8 +311,8 @@ matplot(as.numeric(dimnames(mo1.c)[[1]]), mo1.c[,,'0','1'], type='l',bty='l', yl
 
 ###SPLINE ANALYSIS TO GET DERIVATIVES Use smooth.spline function, which is same thing they do in the grofit package; use a fixed smoothing parameter for simplicity
 #library(fdapace)
-Y.list<- split(d1a[,-c(1:8, (48+8+1):ncol(d1a))], as.factor(1:nrow(d1a)))
-d1.data<-d1a[,-c(1:8, (48+8+1):ncol(d1a))]
+Y.list<- split(d1a[,-c(1:9, (48+9+1):ncol(d1a))], as.factor(1:nrow(d1a)))
+d1.data<-d1a[,-c(1:9, (48+9+1):ncol(d1a))]
 Y.list<-lapply(Y.list, function(x) as.numeric(x[1,])) #List of OD600 values
 T.list<-lapply(Y.list, function(x) (1:length(x))/2 ) #List of times (h)
 
@@ -299,7 +326,7 @@ derivs2.all<-t(sapply(spl1, function(x) c(predict(x, deriv=2)$y, rep(NA, 48-leng
 
 #When is 2nd deriv at max? ie start of log phase
 max.deriv2.time<-apply(derivs2.all,1,function(x) which(x==max(x[1:24], na.rm=TRUE))[1] ) #capture peak that occures within first 12 h
-max.deriv2.time<-cbind.data.frame(d1a[,1:8],max.deriv2.time)
+max.deriv2.time<-cbind.data.frame(d1a[,1:9],max.deriv2.time)
 
 par(mfrow=c(4,1), mar=c(1,1,1,1))
 for(i in 1:20){
@@ -326,12 +353,15 @@ matplot(t(test1[, -c(1:8)]), type='l',col=ts.col[temp.lab], xlim=c(1,48),ylim=c(
 max.deriv<-apply(derivs.all,1,max, na.rm=T)
 
 d1c<-cbind.data.frame(d1a[,c('max.od','ID','st','anaerobic','temp', 'Diagnosis')],max.deriv, max.deriv2.time)
-d1c<
 
+scale.max.deriv<-max.deriv/max(max.deriv)
+scale.lag.length<- 1-max.deriv2.time$max.deriv2.time/max(max.deriv2.time$max.deriv2.time)
+lag.growth.composite<-(scale.max.deriv+scale.lag.length)/2
+max.deriv2.time<-cbind.data.frame(max.deriv2.time, lag.growth.composite)
 
 #Compare max.d and length of lag phase and max.deriv
-comp1.gro<-cbind.data.frame(d1a[,c('max.od','ID','st','anaerobic','temp', 'Diagnosis')],max.deriv, max.deriv2.time)
-cor(comp1.gro[,c('max.od','max.deriv','max.deriv2.time')])#growth rate correlated with max.od, not with lag length
+comp1.gro<-cbind.data.frame(d1a[,c('max.od','ID','st','anaerobic','temp', 'Diagnosis')],max.deriv, max.deriv2.time ,lag.growth.composite)
+cor(comp1.gro[,c('max.od','max.deriv','max.deriv2.time','lag.growth.composite')])#growth rate correlated with max.od, not with lag length
 #plot(comp1.gro$max.deriv, comp1.gro$max.od)
 cor.test(comp1.gro[,c('max.od')],comp1.gro[,c('max.deriv')] )
 cor.test(comp1.gro[,c('max.deriv2.time')],comp1.gro[,c('max.deriv')] )
@@ -339,6 +369,25 @@ cor.test(comp1.gro[,c('max.deriv2.time')],comp1.gro[,c('max.od')] )
 ##Does correlation differ with environmental conditions?
 # comp1.gro.ls<-split(comp1.gro, list(comp1.gro$anaerobic, comp1.gro$temp))
 # corr.grp<-lapply(comp1.gro.ls, function(x) cor(x[,c('max.od','max.deriv','max.deriv2.time')] ))
+
+
+#Test association between environment and max.od, max.deriv2.time,max.deriv
+mod1<-lme(max.od  ~ st +  anaerobic+ temp + Diagnosis ,  random = ~ 1|ID,data=d1c[d1c$anaerobic %in% c('0','1','2') & d1c$Diagnosis %in% c('0','5'),])
+fixef1<-summary(mod1)$tTable
+plot(fixef1[,'Value'])
+
+#Growth rate
+mod2<-lme(max.deriv  ~ st +  anaerobic+ temp + Diagnosis ,  random = ~ 1|ID,data=d1c[d1c$anaerobic %in% c('0','1','2') & d1c$Diagnosis %in% c('0','5'),])
+fixef2<-summary(mod2)$tTable
+
+#Lag phase
+mod3<-lme(max.deriv2.time  ~ st +  anaerobic+ temp + Diagnosis ,  random = ~ 1|ID,data=d1c[d1c$anaerobic %in% c('0','1','2') & d1c$Diagnosis %in% c('0','5'),])
+fixef3<-summary(mod3)$tTable
+
+
+#mlst
+mod1a<-lme(max.od  ~   anaerobic+ temp + Diagnosis ,  random =list( ~1|mlst,~1|st, ~1|ID),data=d1c[d1c$anaerobic %in% c('0','1','2') & d1c$Diagnosis %in% c('0','5') & !is.na(d1c$mlst) ,])
+summary(mod1a)
 
 
 ###############################################
@@ -363,6 +412,11 @@ coef.fe.mod.st<-fixef(mod.st)
 coef.st2<-coef.fe.mod.st[substr(names(coef.fe.mod.st),1,2)=='st']
 coef.st.df3<-cbind.data.frame('coef.max.od.2'=coef.st2,'coef.max.od.1'=coef.st1,'coef.max.od.1.2'=coef.st1.2, 'st'=substring(names(coef.st1.2),3))
 cor(coef.st.df3[,1:3])
+
+#Incorporate MLST effect
+mod.st.mlst<-lme(max.od  ~  st+ anaerobic*temp * Diagnosis ,  random =  ~ 1|ID,data=d1b[!is.na(d1b$mlst) & d1b$anaerobic %in% c('1','2') & d1b$Diagnosis %in% c('0','5'),])
+coef.fe.mod.st<-fixef(mod.st)
+coef.st1.2<-coef.fe.mod.st[substr(names(coef.fe.mod.st),1,2)=='st']
 
 ###############################################
 ##############################################
@@ -392,8 +446,17 @@ coef.fe.mod.st.time<-fixef(mod.st.t)
 coef.st.time.2<-coef.fe.mod.st.time[substr(names(coef.fe.mod.st.time),1,2)=='st']
 coef.st.time.df<-cbind.data.frame('coef.st.time1.2'=coef.st.time.1.2,'coef.st.time.2'=coef.st.time.2,'coef.st.time.1'=coef.st.time.1, 'st'=substring(names(coef.st.time.1),3))
 cor(coef.st.time.df[,1:3])
+
+mod.st.t<-lme(lag.growth.composite  ~ st +  anaerobic*temp * Diagnosis ,  random = ~ 1|ID,
+              data=max.deriv2.time[max.deriv2.time$anaerobic %in% c('1','2') 
+                                   & max.deriv2.time$Diagnosis %in% c('0','5'),])
+coef.fe.mod.st.composite<-fixef(mod.st.t)
+coef.st.composite.1.2<-coef.fe.mod.st.composite[substr(names(coef.fe.mod.st.composite),1,2)=='st']
+
+
 ###############################################
 ##############################################
+
 
 #calculate OD at ave max.deriv2.time for a temp.aernarobic/diagnosis combo
 ds.sub<-max.deriv2.time[max.deriv2.time$Diagnosis %in% c('0','5'),]
@@ -426,8 +489,8 @@ mod.st.fixed.od<-lme(od.fixed.time  ~ st +  temp * Diagnosis ,  random = ~ 1|ID,
 coef.fe.mod.st.fixed.od<-fixef(mod.st.fixed.od)
 coef.st.fixed.od.2<-coef.fe.mod.st.fixed.od[substr(names(coef.fe.mod.st.fixed.od),1,2)=='st']
 coef.st.fixed.od.df<-cbind.data.frame('coef.st.fixed.od.1.2'=coef.st.fixed.od.1.2,'coef.st.fixed.od.1'=coef.st.fixed.od.1, 
-                                      'coef.st.fixed.od.2'=coef.st.fixed.od.2,'st'=substring(names(coef.st.fixed.od.2),3))
-cor(coef.st.fixed.od.df[,1:3])
+                                      'coef.st.fixed.od.2'=coef.st.fixed.od.2,'coef.st.composite.df'=coef.st.composite.1.2, 'st'=substring(names(coef.st.fixed.od.2),3))
+cor(coef.st.fixed.od.df[,1:4])
 
 #################################################################################
 #################################################################################
@@ -527,7 +590,7 @@ for(i in c(1:3)){
 dev.off()
 
 #test whether effect of ST varies by anaerobic
-sub<-d1b[d1b$Diagnosis %in% c(0,1,2,3,4,5,6) ,]
+sub<-d1b[d1b$Diagnosis %in% c('0','5') &d1b$anaerobic %in%c('1','2') ,]
 col.ana2<-c('#1b9e77','white','#7570b3')
 pch.ana2=c(15,16,17)
 sub$st<-factor(sub$st)
@@ -538,8 +601,8 @@ summary(mod4)
 test4<- interactionMeans(mod4, factors=c('anaerobic','st'))
 
 #For maile:
-sub<-d1b[d1b$Diagnosis %in% c(0,1,2,3,4,5,6) &d1b$anaerobic %in% c(0,1,2)
-         &d1b$temp %in% c(33,35,37),]
+sub<-d1b[d1b$Diagnosis %in% c(0,5) &d1b$anaerobic %in% c(1,2)
+         &d1b$temp %in% c(30,33,35,37,38,39),]
 sub$anaerobic<-factor(sub$anaerobic)
 sub$temp<-factor(sub$temp)
 sub$Diagnosis<-factor(sub$Diagnosis)
@@ -687,9 +750,9 @@ summary(mod6a)
 
 ##Coefficients for Maile
 #MERGE together all coefficients
-maile.coef1<-merge(coef.st.time.df,coef.st.fixed.od.df, by='st', all=T )
+maile.coef1<-merge(coef.st.time.df,coef.st.fixed.od.df,  by='st', all=T )
 maile.coef2<-merge(coef.st.df3,maile.coef1, by='st', all=T )
-maile.coef3<-maile.coef2[,c('st', "coef.max.od.1","coef.max.od.2", "coef.st.time1.2", "coef.st.fixed.od.1.2")]
+maile.coef3<-maile.coef2[,c('st', "coef.max.od.1","coef.max.od.2", "coef.st.time1.2", "coef.st.fixed.od.1.2", 'coef.st.composite.df')]
 write.csv(maile.coef3, 'st.reg.coeffs.csv')
 
 ######CORRELATE ST COEFFFICIENTS VS OTHER VALUES
@@ -728,6 +791,8 @@ reg.pc5<-glm(sqrt(carr.comp$ave_carr_pre)~ coef.st.time.2 , data=carr.comp)
 summary(reg.pc5)
 reg.pc6<-glm(sqrt(carr.comp$ave_carr_pre)~ coef.st.time.1 , data=carr.comp)
 summary(reg.pc6)
+reg.pc7<-glm(sqrt(carr.comp$ave_carr_pre)~ coef.st.composite.df , data=carr.comp)
+summary(reg.pc7)
 par(mfrow=c(1,1))
 plot(carr.comp$coef.st.fixed.od.1, carr.comp$ave_carr_pre, col='white', bty='l')
 text(carr.comp$coef.st.fixed.od.1, carr.comp$ave_carr_pre, carr.comp$st)   
