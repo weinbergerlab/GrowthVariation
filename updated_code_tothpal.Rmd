@@ -367,6 +367,26 @@ temp.coef1<-coef.func(mod.name=mod1,covar.name='temp', ref.level=33, covar.label
 #o2.coef1<-coef.func(mod.name=mod1,covar.name='anaerobic', ref.level=1, covar.label='Anaerobic', ylabs="Difference in OD600" )
 #o2.coef1
 #temp.coef1
+  pch.ana=c(15,16)
+  col.ana<-c('#1b9e77','#d95f02')
+
+mod3<-lme(max.od  ~ st + anaerobic + temp + anaerobic*temp,  random = ~ 1|ID,data=d1d)
+  summary(mod3)
+  test3<- interactionMeans(mod3, factors=c('anaerobic','temp'))
+  #plot(test3)
+  test3$temp.index<- as.numeric(relevel(as.factor(test3$temp), ref = '30')) #reference
+  test3$temp.index[test3$anaerobic==1]<-test3$temp.index[test3$anaerobic==1]+0.1
+  test3$temp.index[test3$anaerobic==0]<-test3$temp.index[test3$anaerobic==0]-0.1
+  test3$lcl<-test3$`adjusted mean` -1.96*test3$`std. error`
+  test3$ucl<-test3$`adjusted mean` +1.96*test3$`std. error`
+  plot(test3$temp.index, test3$`adjusted mean`, col=col.ana[test3$anaerobic],bty='l', xaxt='n',pch=pch.ana[test3$anaerobic],xlab='', ylim=c(0,0.4), ylab='OD600')
+  arrows(test3$temp.index,test3$lcl,test3$temp.index,test3$ucl, code=3, angle=90, length=0.0,  col=col.ana[test3$anaerobic])
+  axis(side=1,at=c(1,2,3,4,5,6), labels=FALSE)
+  temp.labels=c( expression(paste("30",degree,"C")), expression(paste("33",degree,"C")),expression(paste("35",degree,"C")),
+                 expression(paste("37",degree,"C")), expression(paste("38",degree,"C")), expression(paste("39",degree,"C")))
+  text(c(1,2,3,4,5,6), par("usr")[3] - 0.02, labels=temp.labels, srt=45, pos=1, xpd=TRUE)
+    legend(0.8,0.43,cex=0.8 ,pch=pch.ana[test3$anaerobic],bty='n',  col=col.ana[test3$anaerobic],text.font=2,legend=c('Anaerobic', 'Aerobic with catalase'))
+ 
 ```
 
 ## Derivative vs temp 
@@ -380,10 +400,29 @@ temp.coef2<-coef.func(mod.name=mod2,covar.name='temp', ref.level=33, covar.label
 #o2.coef2
 #temp.coef2
 
+ pch.ana=c(15,16)
+  col.ana<-c('#1b9e77','#d95f02')
+
+mod3<-lme(max.deriv  ~ st + anaerobic + temp + anaerobic*temp,  random = ~ 1|ID,data=d1d)
+  summary(mod3)
+  test3<- interactionMeans(mod3, factors=c('anaerobic','temp'))
+  #plot(test3)
+  test3$temp.index<- as.numeric(relevel(as.factor(test3$temp), ref = '30')) #reference
+  test3$temp.index[test3$anaerobic==1]<-test3$temp.index[test3$anaerobic==1]+0.1
+  test3$temp.index[test3$anaerobic==0]<-test3$temp.index[test3$anaerobic==0]-0.1
+  test3$lcl<-test3$`adjusted mean` -1.96*test3$`std. error`
+  test3$ucl<-test3$`adjusted mean` +1.96*test3$`std. error`
+  plot(test3$temp.index, test3$`adjusted mean`, col=col.ana[test3$anaerobic],bty='l', xaxt='n',pch=pch.ana[test3$anaerobic],xlab='', ylim=c(0.4,0.7), ylab='Growth rate')
+  arrows(test3$temp.index,test3$lcl,test3$temp.index,test3$ucl, code=3, angle=90, length=0.0,  col=col.ana[test3$anaerobic])
+  axis(side=1,at=c(1,2,3,4,5,6), labels=FALSE)
+  temp.labels=c( expression(paste("30",degree,"C")), expression(paste("33",degree,"C")),expression(paste("35",degree,"C")),
+                 expression(paste("37",degree,"C")), expression(paste("38",degree,"C")), expression(paste("39",degree,"C")))
+  text(c(1,2,3,4,5,6), par("usr")[3] - 0.02, labels=temp.labels, srt=45, pos=1, xpd=TRUE)
+    legend(0.8,0.71,cex=0.8 ,pch=pch.ana[test3$anaerobic],bty='n',  col=col.ana[test3$anaerobic],text.font=2,legend=c('Anaerobic','Aerobic with catalase'))
+
 ```
 
 ## Length of Lag phase vs temp
-
 ```{r growth_reg3, fig.show='asis',fig.width=4, fig.height=4}
 #Lag phase
 mod3<-lme(max.deriv2.time  ~  st +  anaerobic+ temp + Diagnosis  ,  random = ~ 1|ID,data=d1d)
@@ -393,6 +432,61 @@ temp.coef3<-coef.func(mod.name=mod3,covar.name='temp', ref.level=33, covar.label
 #o2.coef3<-coef.func(mod.name=mod3,covar.name='anaerobic', ref.level=1, covar.label='Anaerobic' ,ylabs="Difference in lag phase")
 #o2.coef3
 #temp.coef3
+pch.ana=c(15,16)
+  col.ana<-c('#1b9e77','#d95f02')
+
+mod3<-lme(max.deriv2.time  ~ st + anaerobic + temp + anaerobic*temp,  random = ~ 1|ID,data=d1d)
+  summary(mod3)
+  test3<- interactionMeans(mod3, factors=c('anaerobic','temp'))
+  #plot(test3)
+  test3$temp.index<- as.numeric(relevel(as.factor(test3$temp), ref = '30')) #reference
+  test3$temp.index[test3$anaerobic==1]<-test3$temp.index[test3$anaerobic==1]+0.1
+  test3$temp.index[test3$anaerobic==0]<-test3$temp.index[test3$anaerobic==0]-0.1
+  test3$lcl<-test3$`adjusted mean` -1.96*test3$`std. error`
+  test3$ucl<-test3$`adjusted mean` +1.96*test3$`std. error`
+  plot(test3$temp.index, test3$`adjusted mean`/2, col=col.ana[test3$anaerobic],bty='l', xaxt='n',pch=pch.ana[test3$anaerobic],xlab='',ylim=c(2,5), ylab='Lag length (hours)')
+  arrows(test3$temp.index,test3$lcl/2,test3$temp.index,test3$ucl/2, code=3, angle=90, length=0.0,  col=col.ana[test3$anaerobic])
+  axis(side=1,at=c(1,2,3,4,5,6), labels=FALSE)
+  temp.labels=c( expression(paste("30",degree,"C")), expression(paste("33",degree,"C")),expression(paste("35",degree,"C")),
+                 expression(paste("37",degree,"C")), expression(paste("38",degree,"C")), expression(paste("39",degree,"C")))
+  text(c(1,2,3,4,5,6), par("usr")[3] - 0.02, labels=temp.labels, srt=45, pos=1, xpd=TRUE)
+    legend(0.8,0.71,cex=0.8 ,pch=pch.ana[test3$anaerobic],bty='n',  col=col.ana[test3$anaerobic],text.font=2,legend=c('Anaerobic','Aerobic with catalase'))
+
+
+
+```
+
+
+## Length of Lag phase vs temp carriage vs IPD
+```{r growth_reg3, fig.show='asis',fig.width=4, fig.height=4}
+#Lag phase
+mod3<-lme(max.deriv2.time  ~  st +  anaerobic+ temp + Diagnosis  ,  random = ~ 1|ID,data=d1d)
+fixef3<-summary(mod3)$tTable
+temp.coef3<-coef.func(mod.name=mod3,covar.name='temp', ref.level=33, covar.label='Temperature' ,ylabs="Difference in lag phase")
+
+#o2.coef3<-coef.func(mod.name=mod3,covar.name='anaerobic', ref.level=1, covar.label='Anaerobic' ,ylabs="Difference in lag phase")
+#o2.coef3
+#temp.coef3
+pch.ana=c(15,16)
+  col.ana<-c('#1b9e77','#d95f02')
+mod.dat<-d1d[d1d$Diagnosis %in% c('0', '5'),]
+mod.dat$Diagnosis<-factor(mod.dat$Diagnosis)
+mod3<-lme(max.deriv2.time  ~ st + anaerobic + temp + Diagnosis+ Diagnosis*temp,  random = ~ 1|ID,data=mod.dat)
+  summary(mod3)
+  test3<- interactionMeans(mod3, factors=c('Diagnosis','temp'))
+  #plot(test3)
+  test3$temp.index<- as.numeric(relevel(as.factor(test3$temp), ref = '30')) #reference
+  test3$temp.index[test3$Diagnosis==5]<-test3$temp.index[test3$Diagnosis==5]+0.1
+  test3$temp.index[test3$Diagnosis==0]<-test3$temp.index[test3$Diagnosis==0]-0.1
+  test3$lcl<-test3$`adjusted mean` -1.96*test3$`std. error`
+  test3$ucl<-test3$`adjusted mean` +1.96*test3$`std. error`
+  plot(test3$temp.index, test3$`adjusted mean`/2, col=col.ana[test3$Diagnosis],bty='l', xaxt='n',pch=pch.ana[test3$Diagnosis],xlab='',ylim=c(2,5), ylab='Lag length (hours)')
+  arrows(test3$temp.index,test3$lcl/2,test3$temp.index,test3$ucl/2, code=3, angle=90, length=0.0,  col=col.ana[test3$Diagnosis])
+  axis(side=1,at=c(1,2,3,4,5,6), labels=FALSE)
+  temp.labels=c( expression(paste("30",degree,"C")), expression(paste("33",degree,"C")),expression(paste("35",degree,"C")),
+                 expression(paste("37",degree,"C")), expression(paste("38",degree,"C")), expression(paste("39",degree,"C")))
+  text(c(1,2,3,4,5,6), par("usr")[3] - 0.02, labels=temp.labels, srt=45, pos=1, xpd=TRUE)
+    legend(0.8,0.71,cex=0.8 ,pch=pch.ana[test3$Diagnosis],bty='n',  col=col.ana[test3$Diagnosis],text.font=2,legend=c('Anaerobic','Aerobic with catalase'))
 
 
 
@@ -530,7 +624,8 @@ civ1.pal<-rgb(civ1[,1], civ1[,2], civ1[,3])
 color.pick<-sort(sample(length(civ1.pal), nrow(coef.st.regs.plot)))
 civ1.pal2<-civ1.pal[color.pick]
 #my_palette <- colorRampPalette(c("red", "yellow", "green"))(n = nrow(coef.st.regs.plot))
-heatmap(as.matrix(coef.st.regs.plot[,c("coef.st.lag.length.1.2","coef.st.fixed.od.1.2","coef.st.max.od.1.2","coef.growth.rate.1.2")]), scale='column', col=civ1.pal2)
+
+heatmap(as.matrix(coef.st.regs.plot[,c("coef.st.lag.length.1.2","coef.st.fixed.od.1.2","coef.st.max.od.1.2","coef.growth.rate.1.2")]), scale='column', col=civ1.pal2,cexCol=0.5)
 
 
 ##Coefficients for Maile
@@ -542,61 +637,67 @@ maile.coef1$st<-row.names(maile.coef1)
 ```
 
 ## How does serotype effect on max OD vary by oxygen? 
-```{r st.oxygen.interact, fig.width=10.6, fig.height=5.3}
+```{r st.oxygen.interact, fig.width=10.6, fig.height=5.5}
 sub<-d1d
 col.ana2<-c('#1b9e77','#7570b3')
 pch.ana2=c(15,16,17)
 sub$st<-factor(sub$st)
 sub$anaerobic<-factor(sub$anaerobic)
 sub$Diagnosis<-factor(sub$Diagnosis)
-mod4<-lme(max.od  ~ st + anaerobic +Diagnosis+ temp +st*anaerobic,  random = ~ 1|ID,data=sub)
-#summary(mod4)
-test4<- interactionMeans(mod4, factors=c('anaerobic','st'))
-test4$st.num<-as.numeric(test4$st)
-test4$lcl<-test4$`adjusted mean` -1.96*test4$`std. error`
-test4$ucl<-test4$`adjusted mean` +1.96*test4$`std. error`
-test4.plot<-test4
+for(i in c('max.od',  "max.deriv","max.deriv2.time" )){
+  print(i)
+  form1<-as.formula(paste0( i,'~st + anaerobic +Diagnosis+ temp +st*anaerobic' ))
+  mod4<-lme(form1,  random = ~ 1|ID,data=sub)
+  #summary(mod4)
+  test4<- interactionMeans(mod4, factors=c('anaerobic','st'))
+  test4$st.num<-as.numeric(test4$st)
+  test4$lcl<-test4$`adjusted mean` -1.96*test4$`std. error`
+  test4$ucl<-test4$`adjusted mean` +1.96*test4$`std. error`
+  test4.plot<-test4
+  
+  par(mfrow=c(1,1))
+  plot(test4.plot$st.num, test4.plot$`adjusted mean`, col=col.ana2[test4.plot$anaerobic],bty='l', pch=pch.ana2[test4.plot$anaerobic])
+  arrows(test4.plot$st.num,test4.plot$lcl,test4.plot$st.num,test4.plot$ucl, code=3, angle=90, length=0.0,  col=col.ana2[test4.plot$anaerobic])
+  text(test4.plot$st.num[test4.plot$anaerobic==2], test4.plot$`adjusted 
+       mean`[test4.plot$anaerobic==2]*1.2, test4.plot$st[test4.plot$anaerobic==2]) 
+  coefs<-t(coef(mod4)[1,])
+  keep.index.coef<-which(row.names(coefs)=='st1:anaerobic2'):length(coefs)
+  coef.lab<-dimnames(coefs)[[1]][keep.index.coef]
+  coefs.ana.interact<-cbind.data.frame(coef.lab,coefs[keep.index.coef])
+  coefs.ana.interact[,2]<-coefs.ana.interact[,2]-min(coefs.ana.interact[,2])
+  names(coefs.ana.interact)<-c('st','coef.ana.st')
+  coefs.ana.interact<-coefs.ana.interact[order(coefs.ana.interact$coef.ana.st),]
+  coefs.ana.interact$st<-gsub( ":.*$", "", coefs.ana.interact$st ) #exclude text after colon
+  coefs.ana.interact$st<-substr(coefs.ana.interact$st,3,nchar(coefs.ana.interact$st)) #remove "st" from the variable
+  #plot(1:nrow(coefs.ana.interact), coefs.ana.interact$coef.ana.st, bty='l')
+  #text(1:nrow(coefs.ana.interact), coefs.ana.interact$coef.ana.st+0.01,coefs.ana.interact$st )
+  
+  #Plot to show effect of O2 by serotype
+  cis.mod4<-as.data.frame(intervals(mod4)[[1]])
+  keep.index.coef<-which(row.names(cis.mod4)=='st1:anaerobic2'):nrow(cis.mod4)
+  cis.mod4.int<-cis.mod4[keep.index.coef,]
+  cis.mod4.ref<-as.data.frame(t(c(0,0,0))) #add bak in ref serotype
+  names(cis.mod4.ref)<-names(cis.mod4.int)
+  cis.mod4.ref$st<-'14'
+  cis.mod4.int$st<-gsub( ":.*$", "", row.names(cis.mod4.int) ) #exclude text after colon
+  cis.mod4.int$st<-substr(cis.mod4.int$st,3,nchar(cis.mod4.int$st)) #remove "st" from the variable
+  cis.mod4.int<-rbind.data.frame(cis.mod4.ref,cis.mod4.int)
+  remove<-c("43/45/48","6B/D",'9',"25FA/38",'5' ) #our ST5 in CDC collection not actually ST5
+  cis.mod4.int<-cis.mod4.int[!cis.mod4.int$st %in% remove,]
+  cis.mod4.int<-cis.mod4.int[order(cis.mod4.int$est.),]
+  cis.mod4.int$st.num<-1:nrow(cis.mod4.int)
+  cis.mod4.int[,1:3]<-cis.mod4.int[,1:3] - min(cis.mod4.int[,2]) #subtract to center on 0
+  #tiff('fig 4 st o2 effect.tiff',width=10.6, height=5.3, units='in', res=400)
+  plot.range<-range(c(cis.mod4.int[,'est.'],cis.mod4.int$lower,cis.mod4.int$upper) )
+  plot(cis.mod4.int$st.num,cis.mod4.int[,'est.'], bty='l', ylim=plot.range, pch=16, xaxt='n',xlab='',
+       ylab="Difference in max density aerobic (with catalase) vs anaerobic")
+  arrows(cis.mod4.int$st.num,cis.mod4.int$lower,cis.mod4.int$st.num,cis.mod4.int$upper, code=3, angle=90, length=0.0,  col='gray')
+  #bline(h=0, lty=2,)
+  
+  text(cis.mod4.int$st.num,cis.mod4.int[,2]+0.01,cis.mod4.int$st ,srt=90)
+  #dev.off()
 
-par(mfrow=c(1,1))
-plot(test4.plot$st.num, test4.plot$`adjusted mean`, col=col.ana2[test4.plot$anaerobic],bty='l', pch=pch.ana2[test4.plot$anaerobic])
-arrows(test4.plot$st.num,test4.plot$lcl,test4.plot$st.num,test4.plot$ucl, code=3, angle=90, length=0.0,  col=col.ana2[test4.plot$anaerobic])
-text(test4.plot$st.num[test4.plot$anaerobic==2], test4.plot$`adjusted 
-     mean`[test4.plot$anaerobic==2]*1.2, test4.plot$st[test4.plot$anaerobic==2]) 
-
-coefs<-t(coef(mod4)[1,])
-keep.index.coef<-which(row.names(coefs)=='st1:anaerobic2'):length(coefs)
-coef.lab<-dimnames(coefs)[[1]][keep.index.coef]
-coefs.ana.interact<-cbind.data.frame(coef.lab,coefs[keep.index.coef])
-coefs.ana.interact[,2]<-coefs.ana.interact[,2]-min(coefs.ana.interact[,2])
-names(coefs.ana.interact)<-c('st','coef.ana.st')
-coefs.ana.interact<-coefs.ana.interact[order(coefs.ana.interact$coef.ana.st),]
-coefs.ana.interact$st<-gsub( ":.*$", "", coefs.ana.interact$st ) #exclude text after colon
-coefs.ana.interact$st<-substr(coefs.ana.interact$st,3,nchar(coefs.ana.interact$st)) #remove "st" from the variable
-#plot(1:nrow(coefs.ana.interact), coefs.ana.interact$coef.ana.st, bty='l')
-#text(1:nrow(coefs.ana.interact), coefs.ana.interact$coef.ana.st+0.01,coefs.ana.interact$st )
-
-#Plot to show effect of O2 by serotype
-cis.mod4<-as.data.frame(intervals(mod4)[[1]])
-keep.index.coef<-which(row.names(cis.mod4)=='st1:anaerobic2'):nrow(cis.mod4)
-cis.mod4.int<-cis.mod4[keep.index.coef,]
-cis.mod4.ref<-as.data.frame(t(c(0,0,0))) #add bak in ref serotype
-names(cis.mod4.ref)<-names(cis.mod4.int)
-cis.mod4.ref$st<-'14'
-cis.mod4.int$st<-gsub( ":.*$", "", row.names(cis.mod4.int) ) #exclude text after colon
-cis.mod4.int$st<-substr(cis.mod4.int$st,3,nchar(cis.mod4.int$st)) #remove "st" from the variable
-cis.mod4.int<-rbind.data.frame(cis.mod4.ref,cis.mod4.int)
-remove<-c("43/45/48","6B/D",'9',"25FA/38",'5' ) #our ST5 in CDC collection not actually ST5
-cis.mod4.int<-cis.mod4.int[!cis.mod4.int$st %in% remove,]
-cis.mod4.int<-cis.mod4.int[order(cis.mod4.int$est.),]
-cis.mod4.int$st.num<-1:nrow(cis.mod4.int)
-cis.mod4.int[,1:3]<-cis.mod4.int[,1:3] - min(cis.mod4.int[,2]) #subtract to center on 0
-#tiff('fig 4 st o2 effect.tiff',width=10.6, height=5.3, units='in', res=400)
-plot(cis.mod4.int$st.num,cis.mod4.int[,'est.'], bty='l', ylim=c(-0.02,0.18), pch=16, xaxt='n',xlab='',
-     ylab="Max density aerobic (with catalase) - anaerobic")
-arrows(cis.mod4.int$st.num,cis.mod4.int$lower,cis.mod4.int$st.num,cis.mod4.int$upper, code=3, angle=90, length=0.0,  col='gray')
-text(cis.mod4.int$st.num,cis.mod4.int[,2]+0.01,cis.mod4.int$st ,srt=90)
-#dev.off()
-
+}
 ```
 
 ## Two step approach to quantify serotype/strain effect
@@ -739,17 +840,16 @@ text(strain.effect.max.od$st.rank,-0.8, strain.effect.max.od$st, cex=0.75, xpd=N
 ```{r merge.growth.cov}
 growth.dat<-coef.st.regs.plot
 growth.dat$st<-substring(row.names(coef.st.regs.plot), first=3)
+carr.comp<-merge(growth.dat,cov1, by='st', all=T )
 carr1<-cov1[,c('st','SLEEMANCARRN','TROTTERCARRN','NORWAYCARR_PRE','MASSCARR01' ,'GREECECARRN')]
 carr1$st[carr1$st %in% c('15B','15C')]<-'15BC'
 carr2<-aggregate(carr1[,-1], by=list(carr1$st), FUN=sum)
 names(carr2)[1]<-'st'
 carr.comp1a<-merge(growth.dat,carr2, by='st', all=T )
-carr.comp1a[carr.comp$st=='14', c('coef.st.fixed.od.1.2','coef.st.max.od.1.2', 'coef.st.lag.length.1.2',
-                          'coef.growth.rate.1.2')]<-0 #reference level
+carr.comp1a[carr.comp$st=='14', substr(names(carr.comp),1,4)=='coef' ]<-0 #reference level
 
 
 #MERGE together all coefficients
-carr.comp<-merge(growth.dat,cov1, by='st', all=T )
 carr.comp[carr.comp$st=='14', c('coef.st.fixed.od.1.2','coef.st.max.od.1.2', 'coef.st.lag.length.1.2',
                           'coef.growth.rate.1.2')]<-0 #reference level
 carr.comp$sqrt.ave.carr.pre<- sqrt(carr.comp$ave_carr_pre)
@@ -757,7 +857,7 @@ carr.comp$sqrt.ave.carr.pre<- sqrt(carr.comp$ave_carr_pre)
 ```
 
 Test carriage data from 4 different settings against the 4 growth characteristics. This shows that in all 4 settings, the best correlate of pre-PCV prevalence was OD at an early time point. AND best best is OD at early time point under *aerobic* conditions with catalase. For other predictors, it depended on the dataset which was best
-```{r carr.cor}
+```{r carr.cor, fig.width=15, fig.height=3}
 #Corr with carriage data
 reg.func<-function( covar1, carr.var){
   form1<-as.formula( paste0(carr.var,'~', covar1))
@@ -768,13 +868,20 @@ reg.func<-function( covar1, carr.var){
 }
 covar.list<-names(coef.st.regs.plot)[-ncol(coef.st.regs.plot)]
 carr.vars<-c('SLEEMANCARRN','TROTTERCARRN','NORWAYCARR_PRE','MASSCARR01' ,'GREECECARRN')
+carr.labs<-c('Sleeman et al. (UK)', 'Trotter et al. (UK)', 'Vestrheim et al. (Norway)', 'Huang et al (US)', 'Syrogiannopoulos  (Greece)' )
+par(mfrow=c(1,5), mar=c(4,4,1,1))
 for(i in carr.vars){
 reg.results<-lapply(covar.list, reg.func, carr.var=i  )
 aic<-sapply(reg.results, function(x) AIC(x$reg.pc1) )
+df<-sapply(reg.results, function(x) x$reg.pc1$df.residual)
 print(i)
 print(cbind.data.frame(covar.list,aic))
-  plot(carr.comp1a[,covar.list[3]], carr.comp1a[,i], bty='l')
-  title(paste(covar.list[3], i))
+print(cbind.data.frame(covar.list,df))
+
+  plot(carr.comp1a[,'coef.st.fixed.od.2'], carr.comp1a[,i], bty='l', col='white', xlab='Serotype effect on early density', ylab='Carriers (N)' ) 
+  text(carr.comp1a[,'coef.st.fixed.od.2'], carr.comp1a[,i], carr.comp1a$st)
+  #title(paste(covar.list[3], i))
+  title(carr.labs[which(carr.vars==i) ])
 }
 ```
 
@@ -807,7 +914,7 @@ aic<-lapply(reg.results, function(x) AIC(x$reg.pc1) )
 print(aic)
   plot(carr.comp[,covar.list[1]], carr.comp[,"CFRHARBOE"], bty='l')
   title(paste(covar.list[1], ' CFR'))
-#summary(reg.results[[2]]$reg.pc1)
+#summary(reg.results[[1]]$reg.pc1)
 ```
 
 Ps complexity (carbon per repeat unit)--no correlation observed
@@ -818,7 +925,7 @@ aic<-lapply(reg.results, function(x) AIC(x$reg.pc1) )
 print(aic)
   plot(carr.comp[,covar.list[1]], carr.comp[,"TOTALCARBONREPEAT"], bty='l')
   title(paste(covar.list[1], ' CFR'))
-#summary(reg.results[[3]]$reg.pc1)
+#summary(reg.results[[2]]$reg.pc1)
 ```
 
 Invasiveness estimates (from Weingerger et al AJE paper); use inverse variance weights
@@ -832,7 +939,7 @@ reg.inv<-lapply(covar.list, reg.func.lm, outcome.name='log.inv.age1',ds=inv2, wg
 aic<-lapply(reg.inv, function(x) AIC(x$reg.pc1) )
 print(aic)
  
-#summary(reg.results[[3]]$reg.pc1)
+#summary(reg.results[[2]]$reg.pc1)
  
 ```
 
@@ -845,9 +952,17 @@ ps2$NAC[ps2$GlcNAc==1 | ps2$GalNAc==1 | ps2$ManNAc==1 |  ps2$ManNAcA==1 |ps2$Fuc
 ps2$uronic<-0
 ps2$uronic[ps2$GalA==1 |ps2$GlcA==1 ]<-1  #GlcA and GalA derived from same pathway
 
+ps2[,covar.list]<-scale(ps2[,covar.list])
+
+par(mfrow=c(1,2))
+plot(ps2$uronic, ps2$coef.st.max.od.1.2, bty='l', ylab='Effect of serotype on max. density', xlab='Presence of Uronic acid')
+plot(ps2$NAC, ps2$coef.st.max.od.1.2, bty='l', ylab='Effect of serotype on max. density', xlab='Presence of N-acetylated sugar')
+
 #test n-acetylated sugars
 ps.reg.results.NAC<-lapply(covar.list, reg.func.logistic,ds=ps2, outcome.name='NAC')
 aic.NAC<-sapply(ps.reg.results.NAC, function(x) AIC(x$reg.pc1) )
+coef.NAC<-cbind(t(exp(sapply(ps.reg.results.NAC, function(x) coef(x$reg.pc1) ))) ,covar.list)
+
 print(cbind.data.frame(covar.list,aic.NAC))
 #summary(ps.reg.results.NAC[[4]]$reg.pc1)
 #summary(ps.reg.results.NAC[[7]]$reg.pc1)
@@ -857,6 +972,8 @@ print(cbind.data.frame(covar.list,aic.NAC))
 #test uronic acids
 ps.reg.results.UA<-lapply(covar.list, reg.func.logistic,ds=ps2, outcome.name='uronic')
 aic.uronic<-sapply(ps.reg.results.UA, function(x) AIC(x$reg.pc1) )
+or.uronic<-cbind(t(exp(sapply(ps.reg.results.UA, function(x) coef(x$reg.pc1) ))) ,covar.list)
+
 print(cbind.data.frame(covar.list,aic.uronic))
 #summary(ps.reg.results.UA[[4]]$reg.pc1)
 #summary(ps.reg.results.UA[[7]]$reg.pc1)
@@ -868,6 +985,45 @@ table(ps2$uronic,ps2$NAC)
 #multivariate with both uronic and coef.st as predictors
 reg.both<-lm( coef.st.max.od.1.2~ NAC+uronic, data=ps2)
 summary(reg.both)
+
+
+reg.both<-lm( coef.st.max.od.1~ NAC+uronic, data=ps2)
+summary(reg.both)
+
+reg.both<-lm( coef.st.max.od.2~ NAC+uronic, data=ps2)
+summary(reg.both)
+
+
+#do a monte carlo test
+ mc1<-ps2[!is.na(ps2$uronic) & !is.na(ps2$coef.st.max.od.1.2),c('NAC','uronic','coef.st.max.od.1.2')]
+
+ spl1.obs<-split(mc1, mc1$uronic)
+ obs.means.uronic<-sapply(spl1.obs, function(x) mean(x$coef.st.max.od.1.2))
+ diff.mean.uronic<- obs.means.uronic[2]- obs.means.uronic[1]
+ 
+  spl1.obs.nac<-split(mc1, mc1$NAC)
+ obs.means.NAC<-sapply(spl1.obs.nac, function(x) mean(x$coef.st.max.od.1.2))
+ diff.mean.NAC<- obs.means.NAC[2]- obs.means.NAC[1]
+ 
+ 
+ diff.mc.uronic<-rep(NA, 999)
+ diff.mc.NAC<-rep(NA, 999)
+  for(i in 1:999){
+   mc.shuffle<-mc1
+   mc.shuffle$shuffle_uronic<-sample(mc.shuffle$uronic)
+   mc.shuffle$shuffle_NAC<-sample(mc.shuffle$NAC)
+   spl1.obs.uronic<-split(mc.shuffle, mc.shuffle$shuffle_uronic)              
+   spl1.obs.NAC<-split(mc.shuffle, mc.shuffle$shuffle_NAC)
+  mc.means.uronic<-sapply(spl1.obs.uronic, function(x) mean(x$coef.st.max.od.1.2))
+  mc.means.NAC<-sapply(spl1.obs.NAC, function(x) mean(x$coef.st.max.od.1.2))
+   diff.mc.uronic[i]<- mc.means.uronic[2]- mc.means.uronic[1]
+   diff.mc.NAC[i]<- mc.means.NAC[2]- mc.means.NAC[1]
+
+    }
+ p.value.uronic<-  sum(diff.mc.uronic <diff.mean.uronic)/999
+ p.value.NAC<-  sum(diff.mc.NAC >diff.mean.NAC)/999
+ 
+
 
 ```
 
