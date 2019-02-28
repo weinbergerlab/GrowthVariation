@@ -7,7 +7,7 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
-knitr::opts_knit$set(root.dir = 'C:/Users/dmw63/Desktop/My documents h/LAB/growth curve analyses/')
+#knitr::opts_knit$set(root.dir = './growth curve analyses/')
 knitr::opts_chunk$set(dev="png", 
                dev.args=list(type="cairo"),
                dpi=96)
@@ -33,26 +33,22 @@ theme_set(theme_sjplot())
 ### Import covariate data
 ```{r, echo=FALSE}
 #import covariate data
-cov1<-read.csv('C:/Users/dmw63/Desktop/My documents h/OLD LIPSITCH LAB DATA/pneumo_master v2.csv')
+cov1<-read.csv('../Data/carr data.csv')
 cov1$st<-as.character(cov1$ST)
 cov1$MASSCARR01[is.na(cov1$MASSCARR01)]<-0
-cov1$OSMANCARRN[is.na(cov1$OSMANCARRN)]<-0
 cov1$SLEEMANCARRN[is.na(cov1$SLEEMANCARRN)]<-0
 cov1$NORWAYCARR_PRE[is.na(cov1$NORWAYCARR_PRE)]<-0
-cov1$TROTTERCARRN[is.na(cov1$TROTTERCARRN)]<-0
 cov1$GREECECARRN[is.na(cov1$GREECECARRN)]<-0
-cov1$ave_carr_pre<-apply( cbind(cov1$MASSCARR01, cov1$OSMANCARRN, cov1$SLEEMANCARRN, cov1$NORWAYCARR_PRE, cov1$TROTTERCARRN,
-                                cov1$GREECECARRN), 1, mean, na.rm=TRUE )
 cov1$st[cov1$st=='6A/C']<-'6A'
 
 #Invasiveness data
-inv1<-read.csv('C:/Users/dmw63/Desktop/My documents h/INVASIVENESS/mcmc_invasive_single_stage.csv')
+inv1<-read.csv('../Data/mcmc_invasive_single_stage.csv')
 inv1$st=as.character(inv1$st)
 inv1$st[inv1$st=='6A/C']<-'6A'
 
 #Ps composition data
 
-ps1<-read.csv('C:/Users/dmw63/Desktop/My documents h/LAB/pneumo metabolic genes/PS Composition_SS_final.csv')
+ps1<-read.csv('../Data/PS Composition_SS_final.csv')
 ps1$st<-as.character(ps1$Serotype)
 ```
 Analysis for Tothpal et al.
@@ -67,7 +63,7 @@ Key for anaerobic variable: #Ambient air+Catalase is 2, oxyrase (anaerobic) = 1,
 ```{r mlst_import}
 #ID for Israel strains doesn't match up with Israel strains tested in growth assays
 getwd()
-mlst1<-read.csv('./GrowthVariation/pcat_mlst_results.csv')
+mlst1<-read.csv('../Data/pcat_mlst_results.csv')
 mlst1<-mlst1[,c('sample_name','st_pcat1','MLST')]
 names(mlst1)<-c('ID','seq.st', 'mlst')
 mlst.count<-split(mlst1, mlst1$mlst)
@@ -82,7 +78,7 @@ mlst1$ID[cdc.strains]<- paste0('CDC_',mlst1$ID[cdc.strains])
 
 
 ```{r growth_data_cleaning}
-d1a<- read.csv("master 5_24_2018.csv")
+d1a<- read.csv("../Data/master 5_24_2018.csv")
 d1a$ID<-as.character(d1a$ID)
 d1a$ID[d1a$Group=="CDC"]<-paste0('CDC','_',d1a$st[d1a$Group=="CDC"])
 d1a$st[which(d1a$st=="11")]<-"11A"
@@ -619,7 +615,7 @@ coef.st.regs<-cbind.data.frame('coef.st.fixed.od.1.2'=coef.st.fixed.od.1.2,
 coef.st.regs.plot<-coef.st.regs
 coef.st.regs.plot$coef.st.lag.length.1.2<- -1*coef.st.regs.plot$coef.st.lag.length.1.2 #flip direction
 #cividis color pallete http://journals.plos.org/plosone/article?id=10.1371/journal.pone.0199239#sec011
-civ1<-read.csv('C:/Users/dmw63/Desktop/My documents h/color palettes/cividis rgb.csv')
+civ1<-read.csv('../Data/cividis rgb.csv')
 civ1.pal<-rgb(civ1[,1], civ1[,2], civ1[,3])
 color.pick<-sort(sample(length(civ1.pal), nrow(coef.st.regs.plot)))
 civ1.pal2<-civ1.pal[color.pick]
@@ -630,9 +626,9 @@ heatmap(as.matrix(coef.st.regs.plot[,c("coef.st.lag.length.1.2","coef.st.fixed.o
 
 ##Coefficients for Maile
 #MERGE together all coefficients
-maile.coef1<-coef.st.regs.plot
-maile.coef1$st<-row.names(maile.coef1)
-  write.csv(maile.coef1, 'coef.st.regs.plot.csv')
+# maile.coef1<-coef.st.regs.plot
+# maile.coef1$st<-row.names(maile.coef1)
+#   write.csv(maile.coef1, 'coef.st.regs.plot.csv')
 
 ```
 
@@ -754,6 +750,8 @@ plot(strain.effect.max.od3$st.rank,strain.effect.max.od3$`(Intercept)`, bty='n',
 abline(h=c(-0.1,-0.05,0,0.05,0.1), lty=c(3,3,2,3,3), col='lightgray', lwd=0.5)
 text(strain.effect.max.od3$st.rank,-0.15, strain.effect.max.od3$st, cex=0.75, xpd=NA, srt=90,col=col.pal2[strain.effect.max.od3$st.rank])
 
+#MLST 433 is only one that convincingly has multiple serotypes 22F ans 35A/42
+
 
 ```
 
@@ -780,6 +778,8 @@ plot(strain.effect.max.od$st.rank,strain.effect.max.od$`(Intercept)`, bty='n',ya
 axis(side=2, at=c(-4.0,-2.0,0.0,2,4,5))
 abline(h=c(-4,-2,0,2,4,6), lty=c(3,3,2,3,3,3), col='lightgray', lwd=0.5)
 text(strain.effect.max.od$st.rank,-4, strain.effect.max.od$st, cex=0.75, xpd=NA, srt=90,col=col.pal2[strain.effect.max.od$st.rank])
+
+
 
 ```
 
@@ -841,7 +841,7 @@ text(strain.effect.max.od$st.rank,-0.8, strain.effect.max.od$st, cex=0.75, xpd=N
 growth.dat<-coef.st.regs.plot
 growth.dat$st<-substring(row.names(coef.st.regs.plot), first=3)
 carr.comp<-merge(growth.dat,cov1, by='st', all=T )
-carr1<-cov1[,c('st','SLEEMANCARRN','TROTTERCARRN','NORWAYCARR_PRE','MASSCARR01' ,'GREECECARRN')]
+carr1<-cov1[,c('st','SLEEMANCARRN','NORWAYCARR_PRE','MASSCARR01' ,'GREECECARRN','MASSCARR07' )]
 carr1$st[carr1$st %in% c('15B','15C')]<-'15BC'
 carr2<-aggregate(carr1[,-1], by=list(carr1$st), FUN=sum)
 names(carr2)[1]<-'st'
@@ -852,7 +852,6 @@ carr.comp1a[carr.comp$st=='14', substr(names(carr.comp),1,4)=='coef' ]<-0 #refer
 #MERGE together all coefficients
 carr.comp[carr.comp$st=='14', c('coef.st.fixed.od.1.2','coef.st.max.od.1.2', 'coef.st.lag.length.1.2',
                           'coef.growth.rate.1.2')]<-0 #reference level
-carr.comp$sqrt.ave.carr.pre<- sqrt(carr.comp$ave_carr_pre)
 
 ```
 
@@ -867,8 +866,8 @@ reg.func<-function( covar1, carr.var){
   return(out.obj)
 }
 covar.list<-names(coef.st.regs.plot)[-ncol(coef.st.regs.plot)]
-carr.vars<-c('SLEEMANCARRN','TROTTERCARRN','NORWAYCARR_PRE','MASSCARR01' ,'GREECECARRN')
-carr.labs<-c('Sleeman et al. (UK)', 'Trotter et al. (UK)', 'Vestrheim et al. (Norway)', 'Huang et al (US)', 'Syrogiannopoulos  (Greece)' )
+carr.vars<-c('SLEEMANCARRN','NORWAYCARR_PRE','MASSCARR01' ,'GREECECARRN')
+carr.labs<-c('Sleeman et al. (UK)',  'Vestrheim et al. (Norway)', 'Huang et al (US)', 'Syrogiannopoulos  (Greece)' )
 par(mfrow=c(1,5), mar=c(4,4,1,1))
 for(i in carr.vars){
 reg.results<-lapply(covar.list, reg.func, carr.var=i  )
