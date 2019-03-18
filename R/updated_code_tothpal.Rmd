@@ -705,6 +705,9 @@ strain.effect.max.od<-ranef(mod.st2)
 strain.effect.max.od$ID<-row.names(strain.effect.max.od)
 strain.chars<-unique(d1d[,c('ID', 'st')])
 strain.effect.max.od<-merge(strain.effect.max.od, strain.chars, by='ID' , all=TRUE)
+#export for shreyas
+write.csv(strain.effect.max.od,'../strain.effect.max.od.csv')
+
 #Want to sort by median RE for the ST
 strain.effect.max.od.spl<-split(strain.effect.max.od, strain.effect.max.od$st)
 strain.effect.max.od.median<-as.data.frame(sapply(strain.effect.max.od.spl, function(x) median(x$'(Intercept)') ))
