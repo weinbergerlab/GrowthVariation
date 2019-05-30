@@ -632,6 +632,69 @@ heatmap(as.matrix(coef.st.regs.plot[,c("coef.st.lag.length.1.2","coef.st.fixed.o
 
 ```
 
+## Evaluate the difference in rank order by serotype in aerobic/anaerobic
+```{r, fig.width=4, fig.height=4}
+coef.st.fixed.od.1
+coef.st.fixed.od.2
+plot.range<-range(c(coef.st.fixed.od.1,coef.st.fixed.od.2))
+plot(coef.st.fixed.od.2,coef.st.fixed.od.1, ylim=plot.range, xlim=plot.range)
+abline(a=0, b=1)
+
+#all.perm<-expand.grid(coef.st.fixed.od.1,coef.st.fixed.od.2)
+comb1<-expand.grid(coef.st.fixed.od.1,coef.st.fixed.od.1)
+comb2<-expand.grid(coef.st.fixed.od.2,coef.st.fixed.od.2)
+
+#Evaluate difference in OD between serotypes and compare anaerobic(1) and aerobic(2)
+diff1<- comb1[,1]-comb1[,2]
+diff2<- comb2[,1]-comb2[,2]
+plot(diff1, diff2)
+abline(a=0, b=1, h=0.01, v=0.01)
+
+#Flag pairs where direction flips (where strain 1 is more fit in 1 conditions and less fit in the other)
+flag.pair<- rep(0, times=length(diff1))
+flag.pair[diff1>0.005 & diff2< -0.005 ]<-1
+flag.sts<-cbind( names(comb1$Var1)[flag.pair==1], names(comb1$Var2)[flag.pair==1]  )
+flag.sts<-flag.sts[order(flag.sts[,1], flag.sts[,2]),]
+#names(comb1$Var1)==names(comb2$Var1) ##check
+
+```
+
+Same, but for IPD only
+```{r}
+od.fixed.cdc<-od.fixed.time[substr(od.fixed.time$ID,1,3)=='CDC' & od.fixed.time$temp %in% c('33','35','37'),]
+mod.st.fixed.od2.cdc<-lm(od.fixed.time  ~ st +  temp  ,
+                     data=od.fixed.cdc[od.fixed.cdc$anaerobic==2,])
+coef.fe.mod.st.fixed.od2.cdc<-coef(mod.st.fixed.od2.cdc)
+mod.st.fixed.od1.cdc<-lm(od.fixed.time  ~ st +  temp  ,
+                     data=od.fixed.cdc[od.fixed.cdc$anaerobic==1,])
+coef.fe.mod.st.fixed.od1.cdc<-coef(mod.st.fixed.od1.cdc)
+
+##
+plot.range<-range(c(coef.fe.mod.st.fixed.od1.cdc,coef.fe.mod.st.fixed.od2.cdc))
+plot(coef.fe.mod.st.fixed.od2.cdc,coef.fe.mod.st.fixed.od1.cdc, ylim=plot.range, xlim=plot.range)
+abline(a=0, b=1)
+
+#all.perm<-expand.grid(coef.st.fixed.od.1,coef.st.fixed.od.2)
+comb1<-expand.grid(coef.fe.mod.st.fixed.od1.cdc,coef.fe.mod.st.fixed.od1.cdc)
+comb2<-expand.grid(coef.fe.mod.st.fixed.od2.cdc,coef.fe.mod.st.fixed.od2.cdc)
+
+#Evaluate difference in OD between serotypes and compare anaerobic(1) and aerobic(2)
+diff1<- comb1[,1]-comb1[,2]
+diff2<- comb2[,1]-comb2[,2]
+plot(diff1, diff2)
+abline(a=0, b=1, h=0.0, v=0.0)
+
+#Flag pairs where direction flips (where strain 1 is more fit in 1 conditions and less fit in the other)
+flag.pair<- rep(0, times=length(diff1))
+flag.pair[diff1< -0.005 & diff2> 0.005 ]<-1
+flag.sts<-cbind( names(comb1$Var1)[flag.pair==1], names(comb1$Var2)[flag.pair==1]  )
+flag.sts<-flag.sts[order(flag.sts[,1], flag.sts[,2]),]
+#names(comb1$Var1)==names(comb2$Var1) ##check
+```
+
+
+
+
 ## How does serotype effect on max OD vary by oxygen? 
 ```{r st.oxygen.interact, fig.width=10.6, fig.height=5.5}
 sub<-d1d
