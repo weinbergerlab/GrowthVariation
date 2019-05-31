@@ -250,7 +250,7 @@ derivs2.all<-t(sapply(spl1, function(x) c(predict(x, deriv=2)$y, rep(NA, 48-leng
 
 par(mfrow=c(2,5), mar=c(2,2,1,1))
 for(i in 1:10){
-  decline.quant1<-round((sum(derivs.all[i,][derivs.all[i,]<0])),2)
+  decline.quant1<-round((mean(derivs.all[i,][derivs.all[i,]<0])),2)
   plot(derivs.all[i,], type='l', bty='l', main=decline.quant1, ylim=c(-0.4, 1))
   abline(h=0)
 }
@@ -758,6 +758,8 @@ pch.ana2=c(15,16,17)
 sub$st<-factor(sub$st)
 sub$anaerobic<-factor(sub$anaerobic)
 sub$Diagnosis<-factor(sub$Diagnosis)
+sub$decline.quant[is.nan(sub$decline.quant)]<-0
+
 for(i in c('max.od',  "max.deriv","max.deriv2.time",'decline.quant' )){
   print(i)
   form1<-as.formula(paste0( i,'~st + anaerobic +Diagnosis+ temp +st*anaerobic' ))
@@ -820,13 +822,14 @@ In some strains, the growth curve levels out, while in others it drops sharply. 
 --Positive coefficients mean that the serotype experienced a less intense dip
 ```{r st.oxygen.interact, fig.width=10.6, fig.height=5.5}
 sub<-d1d
+sub$decline.quant[is.nan(sub$decline.quant)]<-0
 col.ana2<-c('#1b9e77','#7570b3')
 pch.ana2=c(15,16,17)
 sub$st<-factor(sub$st)
 sub$anaerobic<-factor(sub$anaerobic)
 sub$Diagnosis<-factor(sub$Diagnosis)
   form1<-as.formula(paste0( 'decline.quant','~st + anaerobic +Diagnosis+ temp' ))
-  mod4<-lme(form1,  random = ~ 1|ID,data=sub[sub$anaerobic])
+  mod4<-lme(form1,  random = ~ 1|ID,data=sub)
   summary(mod4)
   coefs<-fixef(mod4)
   coefs.st<-sort(coefs[substr(names(coefs),1,2)=='st'])
@@ -845,6 +848,7 @@ strain.chars<-unique(d1d[,c('ID', 'st')])
 strain.effect.max.od<-merge(strain.effect.max.od, strain.chars, by='ID' , all=TRUE)
 #export for shreyas
 write.csv(strain.effect.max.od,'../strain.effect.max.od.csv')
+
 
 #Want to sort by median RE for the ST
 strain.effect.max.od.spl<-split(strain.effect.max.od, strain.effect.max.od$st)
@@ -866,6 +870,17 @@ col.pal2<- sample(col.pal2)
 plot(strain.effect.max.od$st.rank,strain.effect.max.od$`(Intercept)`, bty='n',xaxt='n', ylim=c(-0.15,0.15), ylab='Isolate residual (Max Density)', xlab='', col=col.pal2[strain.effect.max.od$st.rank], pch=16)
 abline(h=c(-0.1,-0.05,0,0.05,0.1), lty=c(3,3,2,3,3), col='lightgray', lwd=0.5)
 text(strain.effect.max.od$st.rank,-0.15, strain.effect.max.od$st, cex=0.75, xpd=NA, srt=90,col=col.pal2[strain.effect.max.od$st.rank])
+
+#Quantfy intensity of the decline (average negative derivative)
+d1d$decline.quant[is.nan(d1d$decline.quant)]<-0
+mod.st2<-lme(decline.quant  ~   anaerobic*temp + Diagnosis*anaerobic ,  random = ~ 1|ID,data=d1d)
+strain.effect.max.od<-ranef(mod.st2)
+strain.effect.max.od$ID<-row.names(strain.effect.max.od)
+strain.chars<-unique(d1d[,c('ID', 'st')])
+strain.effect.max.od<-merge(strain.effect.max.od, strain.chars, by='ID' , all=TRUE)
+#export for shreyas
+write.csv(strain.effect.max.od,'../strain.effect.decline.csv')
+
 ```
 
 #Re-run for anaerobic and aerobic
