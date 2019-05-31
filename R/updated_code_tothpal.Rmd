@@ -220,7 +220,7 @@ d1a<-d1a[d1a$max.od>=0.05,]    #FILTER OUT IF MAX OD <0.05
 ### Calculate Max density, derivatives
 Format data for regression
 ```{r deriv.calc1}
-d1b<-d1a[d1a$Diagnosis %in% c('0', '1','2','3','4','5','6'),]
+d1b<-d1a
 d1b$Diagnosis<-factor(d1b$Diagnosis)
 d1b$st<-factor(d1b$st)
 d1b$temp<-factor(d1b$temp)
@@ -248,15 +248,31 @@ fitted.all<-t(sapply(spl1, function(x) c(predict(x)$y, rep(NA, 48-length(predict
 derivs.all<-t(sapply(spl1, function(x) c(predict(x, deriv=1)$y, rep(NA, 48-length(predict(x)$y ))  )))
 derivs2.all<-t(sapply(spl1, function(x) c(predict(x, deriv=2)$y, rep(NA, 48-length(predict(x)$y ))  )))
 
+par(mfrow=c(2,5), mar=c(2,2,1,1))
+for(i in 1:10){
+  decline.quant1<-round((sum(derivs.all[i,][derivs.all[i,]<0])),2)
+  plot(derivs.all[i,], type='l', bty='l', main=decline.quant1, ylim=c(-0.4, 1))
+  abline(h=0)
+}
+
+#Quantify intensity of the decline after peak
+decline.quant<- apply(derivs.all,1, function(x) mean(x[x<0], na.rm=T))
+
+test1<-cbind.data.frame(decline.quant,d1b[,1:10])
+test1.tigr<-test1[test1$Diagnosis==8,]
+
 #When is 2nd deriv at max? ie start of log phase
 max.deriv2.time<-apply(derivs2.all,1,function(x) which(x==max(x[1:24], na.rm=TRUE))[1] ) #capture peak that occures within first 12 h
 max.deriv2.time<-cbind.data.frame(d1b[,1:10],max.deriv2.time)
 
+#od.t48
+
+
 max.deriv<-apply(derivs.all,1,max, na.rm=T)
 
 
-d1c<-cbind.data.frame(d1b[,c('max.od','ID','st','anaerobic','temp', 'Diagnosis')],max.deriv, "max.deriv2.time"=max.deriv2.time[,c('max.deriv2.time')])
-d1d<-d1c[d1c$anaerobic %in% c('1','2'),]
+d1c<-cbind.data.frame(d1b[,c('max.od','ID','st','anaerobic','temp', 'Diagnosis')],max.deriv, decline.quant, "max.deriv2.time"=max.deriv2.time[,c('max.deriv2.time')])
+d1d<-d1c[d1c$anaerobic %in% c('1','2') & d1c$Diagnosis %in% c('0', '1','2','3','4','5','6'),]
 d1d$anaerobic<-factor(d1d$anaerobic)
 
 #calculate OD at ave max.deriv2.time for a temp.aernarobic/diagnosis combo
@@ -742,7 +758,7 @@ pch.ana2=c(15,16,17)
 sub$st<-factor(sub$st)
 sub$anaerobic<-factor(sub$anaerobic)
 sub$Diagnosis<-factor(sub$Diagnosis)
-for(i in c('max.od',  "max.deriv","max.deriv2.time" )){
+for(i in c('max.od',  "max.deriv","max.deriv2.time",'decline.quant' )){
   print(i)
   form1<-as.formula(paste0( i,'~st + anaerobic +Diagnosis+ temp +st*anaerobic' ))
   mod4<-lme(form1,  random = ~ 1|ID,data=sub)
@@ -797,6 +813,26 @@ for(i in c('max.od',  "max.deriv","max.deriv2.time" )){
 
 }
 ```
+
+## Late stage effects post peak
+In some strains, the growth curve levels out, while in others it drops sharply. This also seems to differ for aerobic and anaerobic in some instances. Does the peak to end ratio differ by strain, and does this differ for aerobic vs anaerobic
+--Patterns seems to be mostly simialr for the top serotypes in both aerobic and anaerobic. 
+--Positive coefficients mean that the serotype experienced a less intense dip
+```{r st.oxygen.interact, fig.width=10.6, fig.height=5.5}
+sub<-d1d
+col.ana2<-c('#1b9e77','#7570b3')
+pch.ana2=c(15,16,17)
+sub$st<-factor(sub$st)
+sub$anaerobic<-factor(sub$anaerobic)
+sub$Diagnosis<-factor(sub$Diagnosis)
+  form1<-as.formula(paste0( 'decline.quant','~st + anaerobic +Diagnosis+ temp' ))
+  mod4<-lme(form1,  random = ~ 1|ID,data=sub[sub$anaerobic])
+  summary(mod4)
+  coefs<-fixef(mod4)
+  coefs.st<-sort(coefs[substr(names(coefs),1,2)=='st'])
+  coefs.st
+```
+
 
 ## Two step approach to quantify serotype/strain effect
 
