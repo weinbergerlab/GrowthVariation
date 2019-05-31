@@ -503,6 +503,8 @@ title('Carriage isolates')
 
 ``` 
 
+
+
 ```{r}
 #Function to extract st coefficients
 st.coef.func<-function(mod.name, covar.name='st',covar.label, ref.level, ylabs){
@@ -540,7 +542,7 @@ coef.fe.mod.st<-fixef(mod.st)
 coef.st2<-coef.fe.mod.st[substr(names(coef.fe.mod.st),1,2)=='st' ]
 
 #Time to start of lag growth (max deriv 2)
-lag.length.mod<-lme(max.deriv2.time  ~ st +anaerobic*temp+anaerobic*Diagnosis  ,  random = ~ 1|ID,                    data=d1d)
+lag.length.mod<-lme(max.deriv2.time  ~ st +anaerobic*temp+anaerobic*Diagnosis  ,  random = ~ 1|ID, data=d1d)
 coef.fe.lag.length.st<-fixef(lag.length.mod)
 coef.lag.length.1.2<-coef.fe.lag.length.st[substr(names(coef.fe.lag.length.st),1,2)=='st']
 st.coef.func(lag.length.mod, covar.label='Serotype',ref.level='14', ylabs='Difference in Lag length')
@@ -830,6 +832,29 @@ abline(h=c(-0.1,-0.05,0,0.05,0.1), lty=c(3,3,2,3,3), col='lightgray', lwd=0.5)
 text(strain.effect.max.od$st.rank,-0.15, strain.effect.max.od$st, cex=0.75, xpd=NA, srt=90,col=col.pal2[strain.effect.max.od$st.rank])
 ```
 
+#Re-run for anaerobic and aerobic
+```{r st.effect.od2, fig.width=8, fig.height=4.5}
+#Max OD ...note can't have Dx*temp interaction bc it won't converge
+mod.st2<-lme(max.od  ~   temp + Diagnosis ,  random = ~ 1|ID,data=d1d[d1d$anaerobic=='1',])
+strain.effect.max.od<-ranef(mod.st2)
+strain.effect.max.od$ID<-row.names(strain.effect.max.od)
+strain.chars<-unique(d1d[,c('ID', 'st')])
+strain.effect.max.od<-merge(strain.effect.max.od, strain.chars, by='ID' , all=TRUE)
+#export for shreyas
+write.csv(strain.effect.max.od,'../strain.effect.max.od.anaerobic.csv')
+
+mod.st2<-lme(max.od  ~   temp + Diagnosis ,  random = ~ 1|ID,data=d1d[d1d$anaerobic=='2',])
+strain.effect.max.od<-ranef(mod.st2)
+strain.effect.max.od$ID<-row.names(strain.effect.max.od)
+strain.chars<-unique(d1d[,c('ID', 'st')])
+strain.effect.max.od<-merge(strain.effect.max.od, strain.chars, by='ID' , all=TRUE)
+#export for shreyas
+write.csv(strain.effect.max.od,'../strain.effect.max.od.aerobic.csv')
+
+```
+
+
+
 View previous plot with MLSt information added on for strains where we have WGS data
 ```{r}
 #merge in MLST
@@ -937,6 +962,25 @@ abline(h=c(-0.8,-0.4,-0.2,0.0,0.2,0.4,1,2), lty=c(3,3,3,2,3,3,3,3), col='lightgr
 text(strain.effect.max.od$st.rank,-0.8, strain.effect.max.od$st, cex=0.75, xpd=NA, srt=90,col=col.pal2[strain.effect.max.od$st.rank])
 
 ```
+
+repeat for anaerobic and aerobic
+```{r}
+#Max OD ...note can't have Dx*temp interaction bc it won't converge
+mod.st2<-lme(log(od.fixed.time+0.01)  ~   temp + Diagnosis ,  random = ~ 1|ID,data=od.fixed.time[od.fixed.time$anaerobic=='1',])
+strain.effect.max.od<-ranef(mod.st2)
+strain.effect.max.od$ID<-row.names(strain.effect.max.od)
+strain.chars<-unique(d1d[,c('ID', 'st')])
+strain.effect.max.od<-merge(strain.effect.max.od, strain.chars, by='ID' , all=TRUE)
+write.csv(strain.effect.max.od, '../od.fixed.time.anaerobic.csv')
+
+mod.st2<-lme(log(od.fixed.time+0.01)  ~   temp + Diagnosis ,  random = ~ 1|ID,data=od.fixed.time[od.fixed.time$anaerobic=='1',])
+strain.effect.max.od<-ranef(mod.st2)
+strain.effect.max.od$ID<-row.names(strain.effect.max.od)
+strain.chars<-unique(d1d[,c('ID', 'st')])
+strain.effect.max.od<-merge(strain.effect.max.od, strain.chars, by='ID' , all=TRUE)
+write.csv(strain.effect.max.od, '../od.fixed.time.aerobic.csv')
+```
+
 
 ## Correlate growth characteristics with serotype capsule and epi characteristics
 
