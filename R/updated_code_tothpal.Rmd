@@ -543,23 +543,24 @@ title('Carriage isolates')
 ## Calculate serotype effect on growth after controlling for environmental variability
 ```{r st.effect, fig.width=10}
 #Max OD
-mod.st<-lme(max.od  ~ st +  anaerobic*temp + Diagnosis*anaerobic ,  random = ~ 1|ID,data=d1d)
+d1d2<-d1d[d1d$Diagnosis %in% c('5','0'),]
+mod.st<-lme(max.od  ~ st +  anaerobic*temp + Diagnosis*anaerobic ,  random = ~ 1|ID,data=d1d2)
 coef.fe.mod.st<-fixef(mod.st)
 coef.st1.2<-coef.fe.mod.st[substr(names(coef.fe.mod.st),1,2)=='st']
 st.coef.func(mod.st, covar.label='Serotype',ref.level='14', ylabs='Difference in Max OD600')
 abline(h=0, col='gray', lty=2)
 
 
-mod.st<-lme(max.od  ~ st +  temp + Diagnosis ,  random = ~ 1|ID,data=d1d[d1d$anaerobic=='1',])
+mod.st<-lme(max.od  ~ st +  temp + Diagnosis ,  random = ~ 1|ID,data=d1d2[d1d2$anaerobic=='1',])
 coef.fe.mod.st<-fixef(mod.st)
 coef.st1<-coef.fe.mod.st[substr(names(coef.fe.mod.st),1,2)=='st' ]
 
-mod.st<-lme(max.od  ~ st +  temp + Diagnosis ,  random = ~ 1|ID,data=d1d[d1d$anaerobic=='2',])
+mod.st<-lme(max.od  ~ st +  temp + Diagnosis ,  random = ~ 1|ID,data=d1d2[d1d2$anaerobic=='2',])
 coef.fe.mod.st<-fixef(mod.st)
 coef.st2<-coef.fe.mod.st[substr(names(coef.fe.mod.st),1,2)=='st' ]
 
 #Time to start of lag growth (max deriv 2)
-lag.length.mod<-lme(max.deriv2.time  ~ st +anaerobic*temp+anaerobic*Diagnosis  ,  random = ~ 1|ID, data=d1d)
+lag.length.mod<-lme(max.deriv2.time  ~ st +anaerobic*temp+anaerobic*Diagnosis  ,  random = ~ 1|ID, data=d1d2)
 coef.fe.lag.length.st<-fixef(lag.length.mod)
 coef.lag.length.1.2<-coef.fe.lag.length.st[substr(names(coef.fe.lag.length.st),1,2)=='st']
 st.coef.func(lag.length.mod, covar.label='Serotype',ref.level='14', ylabs='Difference in Lag length')
@@ -568,7 +569,7 @@ abline(h=0, col='gray', lty=2)
 #Max growth rate
 #Time to start of lag growth (max deriv 2)
 growth.rate.mod<-lme(max.deriv  ~ st +anaerobic*temp + anaerobic*Diagnosis  ,  random = ~ 1|ID,
-                    data=d1d)
+                    data=d1d2)
 coef.fe.growth.rate.st<-fixef(growth.rate.mod)
 coef.growth.rate.1.2<-coef.fe.growth.rate.st[substr(names(coef.fe.growth.rate.st),1,2)=='st']
 st.coef.func(growth.rate.mod, covar.label='Serotype',ref.level='14', ylabs='Difference in growth rate')
@@ -576,20 +577,20 @@ abline(h=0, col='gray', lty=2)
 
 
 growth.rate.mod<-lme(max.deriv  ~ st +temp + Diagnosis  ,  random = ~ 1|ID,
-                    data=d1d[d1d$anaerobic==1,])
+                    data=d1d2[d1d2$anaerobic==1,])
 coef.fe.growth.rate.st<-fixef(growth.rate.mod)
 coef.growth.rate.1<-coef.fe.growth.rate.st[substr(names(coef.fe.growth.rate.st),1,2)=='st']
 
 
 growth.rate.mod<-lme(max.deriv  ~ st +temp + Diagnosis  ,  random = ~ 1|ID,
-                    data=d1d[d1d$anaerobic==2,])
+                    data=d1d2[d1d2$anaerobic==2,])
 coef.fe.growth.rate.st<-fixef(growth.rate.mod)
 coef.growth.rate.2<-coef.fe.growth.rate.st[substr(names(coef.fe.growth.rate.st),1,2)=='st']
 
 
 #OD at early, fixed timepoint
-mod.st.fixed.od<-lme(od.fixed.time  ~ st +  anaerobic*temp  ,  random = ~ 1|ID,
-                     data=od.fixed.time)
+mod.st.fixed.od<-lme(od.fixed.time  ~ st +  anaerobic*temp + anaerobic*Diagnosis ,  random = ~ 1|ID,
+                     data=od.fixed.time[od.fixed.time$Diagnosis %in% c('5','0'),])
 coef.fe.mod.st.fixed.od<-fixef(mod.st.fixed.od)
 coef.st.fixed.od.1.2<-coef.fe.mod.st.fixed.od[substr(names(coef.fe.mod.st.fixed.od),1,2)=='st']
 st.coef.func(mod.st.fixed.od, covar.label='Serotype',ref.level='14', ylabs='Difference in early OD')
@@ -607,12 +608,12 @@ length(unique(od.fixed.time[od.fixed.time$anaerobic==1& od.fixed.time$temp=='33'
 length(unique(od.fixed.time[od.fixed.time$anaerobic==2& od.fixed.time$temp=='33','ID']))
 
 mod.st.fixed.od<-lme(od.fixed.time  ~ st +  temp + Diagnosis ,  random = ~ 1|ID,
-                     data=od.fixed.time[od.fixed.time$anaerobic==1,])
+                     data=od.fixed.time[od.fixed.time$anaerobic==1 & od.fixed.time$Diagnosis %in% c('5','0'),])
 coef.fe.mod.st.fixed.od<-fixef(mod.st.fixed.od)
 coef.st.fixed.od.1<-coef.fe.mod.st.fixed.od[substr(names(coef.fe.mod.st.fixed.od),1,2)=='st']
 
 mod.st.fixed.od2<-lme(od.fixed.time  ~ st +  temp + Diagnosis ,  random = ~ 1|ID,
-                     data=od.fixed.time[od.fixed.time$anaerobic==2,])
+                     data=od.fixed.time[od.fixed.time$anaerobic==2 & od.fixed.time$Diagnosis %in% c('5','0'),])
 coef.fe.mod.st.fixed.od<-fixef(mod.st.fixed.od2)
 coef.st.fixed.od.2<-coef.fe.mod.st.fixed.od[substr(names(coef.fe.mod.st.fixed.od),1,2)=='st']
 st.coef.func(mod.st.fixed.od2, covar.label='Serotype',ref.level='14', ylabs='Difference in early OD')
