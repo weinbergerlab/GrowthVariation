@@ -216,6 +216,23 @@ max.od<-apply(d1a[,-c(1:9)],1,max, na.rm=TRUE)
 d1a<-cbind.data.frame(max.od,d1a)
 d1a<-d1a[d1a$max.od>=0.05,]    #FILTER OUT IF MAX OD <0.05
 ```
+```{r}
+#Function to extract st coefficients
+st.coef.func<-function(mod.name, covar.name='st',covar.label, ref.level, ylabs){
+    fixef1<-intervals(mod.name)$fixed
+    coef1<-as.data.frame(fixef1[grep(covar.name,dimnames(fixef1)[[1]]),,drop=FALSE])
+    covar<- gsub('st','',row.names(coef1))
+    coef1[,covar.name]<-covar
+    ref<-cbind.data.frame( 'lower'=0,'est.'=0,'upper'=0,'st'=as.character(ref.level ))
+    coef1<-rbind.data.frame(coef1, ref )
+    coef1$order<- rank(coef1$est.)
+      plot(coef1$order,coef1[,'est.'], ylim=c(min(coef1[,1:3]), max(coef1[,1:3])), ylab=ylabs, xlab=covar.label, bty='l', pch=16, col='black',xaxt='n')
+    arrows(coef1$order, coef1[,'lower'], coef1$order,coef1[,'upper'], length=0)
+    axis(side=1, at=coef1$order , labels=coef1$st ,las=2)
+    plot1<-recordPlot()
+       return(plot1)
+}
+```
 
 ### Calculate Max density, derivatives
 Format data for regression
@@ -521,23 +538,7 @@ title('Carriage isolates')
 
 
 
-```{r}
-#Function to extract st coefficients
-st.coef.func<-function(mod.name, covar.name='st',covar.label, ref.level, ylabs){
-    fixef1<-intervals(mod.name)$fixed
-    coef1<-as.data.frame(fixef1[grep(covar.name,dimnames(fixef1)[[1]]),,drop=FALSE])
-    covar<- gsub('st','',row.names(coef1))
-    coef1[,covar.name]<-covar
-    ref<-cbind.data.frame( 'lower'=0,'est.'=0,'upper'=0,'st'=as.character(ref.level ))
-    coef1<-rbind.data.frame(coef1, ref )
-    coef1$order<- rank(coef1$est.)
-      plot(coef1$order,coef1[,'est.'], ylim=c(min(coef1[,1:3]), max(coef1[,1:3])), ylab=ylabs, xlab=covar.label, bty='l', pch=16, col='black',xaxt='n')
-    arrows(coef1$order, coef1[,'lower'], coef1$order,coef1[,'upper'], length=0)
-    axis(side=1, at=coef1$order , labels=coef1$st ,las=2)
-    plot1<-recordPlot()
-       return(plot1)
-}
-```
+
 
 ## Calculate serotype effect on growth after controlling for environmental variability
 ```{r st.effect, fig.width=10}
@@ -587,7 +588,7 @@ coef.growth.rate.2<-coef.fe.growth.rate.st[substr(names(coef.fe.growth.rate.st),
 
 
 #OD at early, fixed timepoint
-mod.st.fixed.od<-lme(od.fixed.time  ~ st +  anaerobic*temp + anaerobic*Diagnosis ,  random = ~ 1|ID,
+mod.st.fixed.od<-lme(od.fixed.time  ~ st +  anaerobic*temp  ,  random = ~ 1|ID,
                      data=od.fixed.time)
 coef.fe.mod.st.fixed.od<-fixef(mod.st.fixed.od)
 coef.st.fixed.od.1.2<-coef.fe.mod.st.fixed.od[substr(names(coef.fe.mod.st.fixed.od),1,2)=='st']
@@ -644,9 +645,9 @@ heatmap(as.matrix(coef.st.regs.plot[,c("coef.st.lag.length.1.2","coef.st.fixed.o
 
 ##Coefficients for Maile
 #MERGE together all coefficients
-# maile.coef1<-coef.st.regs.plot
-# maile.coef1$st<-row.names(maile.coef1)
-#   write.csv(maile.coef1, 'coef.st.regs.plot.csv')
+ maile.coef1<-coef.st.regs.plot
+ maile.coef1$st<-row.names(maile.coef1)
+   write.csv(maile.coef1, 'coef.st.regs.plot.csv')
 
 ```
 
@@ -874,12 +875,12 @@ text(strain.effect.max.od$st.rank,-0.15, strain.effect.max.od$st, cex=0.75, xpd=
 #Quantfy intensity of the decline (average negative derivative)
 d1d$decline.quant[is.nan(d1d$decline.quant)]<-0
 mod.st2<-lme(decline.quant  ~   anaerobic*temp + Diagnosis*anaerobic ,  random = ~ 1|ID,data=d1d)
-strain.effect.max.od<-ranef(mod.st2)
-strain.effect.max.od$ID<-row.names(strain.effect.max.od)
+strain.effect.ave.decline<-ranef(mod.st2)
+strain.effect.ave.decline$ID<-row.names(strain.effect.ave.decline)
 strain.chars<-unique(d1d[,c('ID', 'st')])
-strain.effect.max.od<-merge(strain.effect.max.od, strain.chars, by='ID' , all=TRUE)
+strain.effect.ave.decline<-merge(strain.effect.ave.decline, strain.chars, by='ID' , all=TRUE)
 #export for shreyas
-write.csv(strain.effect.max.od,'../strain.effect.decline.csv')
+write.csv(strain.effect.ave.decline,'../strain.effect.decline.csv')
 
 ```
 
@@ -899,6 +900,8 @@ strain.effect.max.od<-ranef(mod.st2)
 strain.effect.max.od$ID<-row.names(strain.effect.max.od)
 strain.chars<-unique(d1d[,c('ID', 'st')])
 strain.effect.max.od<-merge(strain.effect.max.od, strain.chars, by='ID' , all=TRUE)
+plot(strain.effect.max.od$st, strain.effect.max.od$`(Intercept)`)
+abline(h=0)
 #export for shreyas
 write.csv(strain.effect.max.od,'../strain.effect.max.od.aerobic.csv')
 
@@ -1024,7 +1027,7 @@ strain.chars<-unique(d1d[,c('ID', 'st')])
 strain.effect.max.od<-merge(strain.effect.max.od, strain.chars, by='ID' , all=TRUE)
 write.csv(strain.effect.max.od, '../od.fixed.time.anaerobic.csv')
 
-mod.st2<-lme(log(od.fixed.time+0.01)  ~   temp + Diagnosis ,  random = ~ 1|ID,data=od.fixed.time[od.fixed.time$anaerobic=='1',])
+mod.st2<-lme(log(od.fixed.time+0.01)  ~   temp + Diagnosis ,  random = ~ 1|ID,data=od.fixed.time[od.fixed.time$anaerobic=='2',])
 strain.effect.max.od<-ranef(mod.st2)
 strain.effect.max.od$ID<-row.names(strain.effect.max.od)
 strain.chars<-unique(d1d[,c('ID', 'st')])
