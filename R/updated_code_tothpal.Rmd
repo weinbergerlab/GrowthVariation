@@ -399,7 +399,7 @@ temp.coef1<-coef.func(mod.name=mod1,covar.name='temp', ref.level=33, covar.label
   pch.ana=c(15,16)
   col.ana<-c('#1b9e77','#d95f02')
 
-mod3<-lme(max.od  ~ st + anaerobic + temp + anaerobic*temp,  random = ~ 1|ID,data=d1d)
+mod3<-lme(max.od  ~ st + temp*anaerobic,  random = ~ 1|ID,data=d1d)
   summary(mod3)
   test3<- interactionMeans(mod3, factors=c('anaerobic','temp'))
   #plot(test3)
@@ -1043,7 +1043,7 @@ write.csv(strain.effect.max.od, '../od.fixed.time.aerobic.csv')
 growth.dat<-coef.st.regs.plot
 growth.dat$st<-substring(row.names(coef.st.regs.plot), first=3)
 carr.comp<-merge(growth.dat,cov1, by='st', all=T )
-carr1<-cov1[,c('st','SLEEMANCARRN','NORWAYCARR_PRE','MASSCARR01' ,'GREECECARRN','MASSCARR07' )]
+carr1<-cov1[,c('st','SLEEMANCARRN','NORWAYCARR_PRE','MASSCARR01' ,'GREECECARRN' )]
 carr1$st[carr1$st %in% c('15B','15C')]<-'15BC'
 carr2<-aggregate(carr1[,-1], by=list(carr1$st), FUN=sum)
 names(carr2)[1]<-'st'
@@ -1195,8 +1195,15 @@ reg.both<-lm( coef.st.max.od.2~ NAC+uronic, data=ps2)
 summary(reg.both)
 
 
+#test Gal
+ps.reg.results.gal<-lapply(covar.list, reg.func.logistic,ds=ps2, outcome.name='Gal')
+aic.gal<-sapply(ps.reg.results.gal, function(x) AIC(x$reg.pc1) )
+or.gal<-cbind(t(exp(sapply(ps.reg.results.gal, function(x) coef(x$reg.pc1) ))) ,covar.list)
+
+print(cbind.data.frame(covar.list,aic.uronic))
+
 #do a monte carlo test
- mc1<-ps2[!is.na(ps2$uronic) & !is.na(ps2$coef.st.max.od.1.2),c('NAC','uronic','coef.st.max.od.1.2')]
+ mc1<-ps2[!is.na(ps2$uronic) & !is.na(ps2$coef.st.max.od.1.2),c('NAC','uronic','Gal','coef.st.max.od.1.2')]
 
  spl1.obs<-split(mc1, mc1$uronic)
  obs.means.uronic<-sapply(spl1.obs, function(x) mean(x$coef.st.max.od.1.2))
@@ -1206,24 +1213,37 @@ summary(reg.both)
  obs.means.NAC<-sapply(spl1.obs.nac, function(x) mean(x$coef.st.max.od.1.2))
  diff.mean.NAC<- obs.means.NAC[2]- obs.means.NAC[1]
  
+   spl1.obs.Gal<-split(mc1, mc1$Gal)
+ obs.means.Gal<-sapply(spl1.obs.Gal, function(x) mean(x$coef.st.max.od.1.2))
+ diff.mean.Gal<- obs.means.Gal[2]- obs.means.Gal[1]
+ 
  
  diff.mc.uronic<-rep(NA, 999)
  diff.mc.NAC<-rep(NA, 999)
+  diff.mc.Gal<-rep(NA, 999)
+
   for(i in 1:999){
    mc.shuffle<-mc1
    mc.shuffle$shuffle_uronic<-sample(mc.shuffle$uronic)
    mc.shuffle$shuffle_NAC<-sample(mc.shuffle$NAC)
-   spl1.obs.uronic<-split(mc.shuffle, mc.shuffle$shuffle_uronic)              
+   mc.shuffle$shuffle_Gal<-sample(mc.shuffle$Gal)
+
+      spl1.obs.uronic<-split(mc.shuffle, mc.shuffle$shuffle_uronic)              
    spl1.obs.NAC<-split(mc.shuffle, mc.shuffle$shuffle_NAC)
-  mc.means.uronic<-sapply(spl1.obs.uronic, function(x) mean(x$coef.st.max.od.1.2))
+   spl1.obs.Gal<-split(mc.shuffle, mc.shuffle$shuffle_Gal)
+   mc.means.uronic<-sapply(spl1.obs.uronic, function(x) mean(x$coef.st.max.od.1.2))
   mc.means.NAC<-sapply(spl1.obs.NAC, function(x) mean(x$coef.st.max.od.1.2))
+  mc.means.Gal<-sapply(spl1.obs.Gal, function(x) mean(x$coef.st.max.od.1.2))
+
    diff.mc.uronic[i]<- mc.means.uronic[2]- mc.means.uronic[1]
    diff.mc.NAC[i]<- mc.means.NAC[2]- mc.means.NAC[1]
+   diff.mc.Gal[i]<- mc.means.Gal[2]- mc.means.Gal[1]
 
     }
  p.value.uronic<-  sum(diff.mc.uronic <diff.mean.uronic)/999
  p.value.NAC<-  sum(diff.mc.NAC >diff.mean.NAC)/999
- 
+  p.value.Gal<-  sum(diff.mc.Gal >diff.mean.Gal)/999
+
 
 
 ```
