@@ -216,6 +216,8 @@ max.od<-apply(d1a[,-c(1:9)],1,max, na.rm=TRUE)
 d1a<-cbind.data.frame(max.od,d1a)
 d1a<-d1a[d1a$max.od>=0.05,]    #FILTER OUT IF MAX OD <0.05
 ```
+
+
 ```{r}
 #Function to extract st coefficients
 st.coef.func<-function(mod.name, covar.name='st',covar.label, ref.level, ylabs){
@@ -291,6 +293,8 @@ max.deriv<-apply(derivs.all,1,max, na.rm=T)
 d1c<-cbind.data.frame(d1b[,c('max.od','ID','st','anaerobic','temp', 'Diagnosis')],max.deriv, decline.quant, "max.deriv2.time"=max.deriv2.time[,c('max.deriv2.time')])
 d1d<-d1c[d1c$anaerobic %in% c('1','2') & d1c$Diagnosis %in% c('0', '1','2','3','4','5','6'),]
 d1d$anaerobic<-factor(d1d$anaerobic)
+  d1d$temp<-factor(d1d$temp)
+  d1d$st<-factor(d1d$st)
 
 #calculate OD at ave max.deriv2.time for a temp.aernarobic/diagnosis combo
 ds.sub<-max.deriv2.time
@@ -399,8 +403,12 @@ temp.coef1<-coef.func(mod.name=mod1,covar.name='temp', ref.level=33, covar.label
   pch.ana=c(15,16)
   col.ana<-c('#1b9e77','#d95f02')
 
-mod3<-lme(max.od  ~ st + temp*anaerobic,  random = ~ 1|ID,data=d1d)
-  summary(mod3)
+#  require(devtools)
+#install_version("nlme", version = "3.1-137", repos = "http://cran.us.r-project.org")
+ # library(nlme)
+
+  mod3<- lme(max.od  ~ st + temp*anaerobic,  random = ~ 1|ID,data=d1d)
+  #summary(mod3)
   test3<- interactionMeans(mod3, factors=c('anaerobic','temp'))
   #plot(test3)
   test3$temp.index<- as.numeric(relevel(as.factor(test3$temp), ref = '30')) #reference
@@ -500,6 +508,7 @@ pch.ana=c(15,16)
   col.ana<-c('#1b9e77','#d95f02')
 mod.dat<-d1d[d1d$Diagnosis %in% c('0', '5'),]
 mod.dat$Diagnosis<-factor(mod.dat$Diagnosis)
+mod.dat$st<-factor(mod.dat$st)
 mod3<-lme(max.deriv2.time  ~ st + anaerobic + temp + Diagnosis+ Diagnosis*temp,  random = ~ 1|ID,data=mod.dat)
   summary(mod3)
   test3<- interactionMeans(mod3, factors=c('Diagnosis','temp'))
